@@ -6,12 +6,14 @@ This project is a Julia-based data analytics tool that ranks ski resorts by weat
 <ul>
 <li>Provide a data-driven ranking system for ski resorts</li>
 <li>Demonstrate how Julia can be used for real-world analytics workflows</li>
+</ul>
 
-<ul>CreateL a foundation for future extensions</li>
+<ul>Create a foundation for future extensions</li>
   <li>Adjustable attribute weights</li>
   <li>Distance-based filtering (e.g., proximity to a city)</li>
   <li>Integration with live weather APIs</li>
   <li>Additional environmental or business attributes (e.g., ticket prices, amenities)</li>
+</ul>
 
 https://prod.liveshare.vsengsaas.visualstudio.com/join?86D4A45EFAFE053D7A4376FE5D646CC2E281
 

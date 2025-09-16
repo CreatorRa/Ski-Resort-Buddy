@@ -1,7 +1,6 @@
 # SkiLookup
 
-A simple Julia project for exploring ski resort information from `resorts.csv`.
-
+Ranks ski resorts by weather. Input: a CSV with a region filter. Output: a ranked list of resorts in that region based on snowfall, temperature, and rainfall.
 ---
 
 ## 📦 Setup

@@ -21,11 +21,19 @@ https://prod.liveshare.vsengsaas.visualstudio.com/join?86D4A45EFAFE053D7A4376FE5
 https://prod.liveshare.vsengsaas.visualstudio.com/join?86D4A45EFAFE053D7A4376FE5D646CC2E281
 
 ---
+Possible Datasources: 
+https://data.hub.geosphere.at/ -- Austria
+https://opendatadocs.meteoswiss.ch/ -- Switzerland
+https://www.dwd.de/EN/ourservices/opendata/opendata.html -- Germany
+https://www.smhi.se/en/research/about-us/open-access-to-data-for-research-and-development -- Sweden
+---
+API's: 
+https://open-meteo.com/en/docs -- Lots of Weather Data for different Countries.
+https://openweathermap.org/current
+https://www.icpac.net/open-data-sources/
+https://data.europa.eu/data/datasets/0bd84be4-cec8-4180-97a6-8b3adaac4d26?locale=en
+https://github.com/open-meteo/open-meteo
 
-Possible Datasources: https://data.hub.geosphere.at/ -- Austria
-                      https://opendatadocs.meteoswiss.ch/ -- Switzerland
-                      https://www.dwd.de/EN/ourservices/opendata/opendata.html -- Germany
-                      https://www.smhi.se/en/research/about-us/open-access-to-data-for-research-and-development -- Sweden
 
 ## 📦 Setup
 

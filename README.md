@@ -22,6 +22,11 @@ https://prod.liveshare.vsengsaas.visualstudio.com/join?86D4A45EFAFE053D7A4376FE5
 
 ---
 
+Possible Datasources: https://data.hub.geosphere.at/ -- Austria
+                      https://opendatadocs.meteoswiss.ch/ -- Switzerland
+                      https://www.dwd.de/EN/ourservices/opendata/opendata.html -- Germany
+                      https://www.smhi.se/en/research/about-us/open-access-to-data-for-research-and-development -- Sweden
+
 ## 📦 Setup
 
 Clone this repository and open it in VS Code or your terminal.

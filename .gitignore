@@ -1,6 +1,41 @@
-/data/raw/*
-/data/processed/*
-!/data/raw/.gitkeep
-!/data/processed/.gitkeep
-/.DS_Store
-/.vscode/
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.code-workspace
+
+# Logs & Temp
+*.log
+*.tmp
+*.bak
+*.swp
+*.swo
+
+# Julia (bewusst nicht ignorieren: Project.toml, Manifest.toml, Artifacts.toml)
+.julia/
+coverage/
+*.cov
+*.lcov
+
+# Dokumentation (z. B. Documenter.jl)
+docs/build/
+docs/site/
+
+# Ausgabeordner (Reports, Artefakte)
+out/
+reports/
+figures/
+tmp/
+
+# Daten (große/temporäre CSVs)
+data/raw/
+data/tmp/
+data/*.csv
+!data/ski-regions-data.csv   # diese zentrale CSV trotzdem versionieren
+
+# Umgebungen / Secrets
+.env
+*.env
+*.env.local
+*.secret

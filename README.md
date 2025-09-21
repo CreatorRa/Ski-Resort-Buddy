@@ -29,23 +29,24 @@ Create a foundation for future extensions
     <li>https://data.europa.eu/data/datasets/0bd84be4-cec8-4180-97a6-8b3adaac4d26?locale=en
     <li>https://github.com/open-meteo/open-meteo
 
+## 🚀 Running the DACH Resort Advisor
 
-## 📦 Setup
+1. Open a terminal in the project root (`Ski-Resort-Buddy`).
+2. Install dependencies (once):
+   ```bash
+   julia --project=. -e 'import Pkg; Pkg.instantiate()'
+   ```
+3. (Optional) Place `ski-regions-data.csv` in the root or set `CSV_PATH=/absolute/path/to/your.csv`.
+4. Use the commands below to explore the data.
 
-Clone this repository and open it in VS Code or your terminal.
+## 🧭 Command Cheat Sheet
 
-Install Julia packages (once, inside the project folder):
+| Command | Description |
+| --- | --- |
+| `julia --project=. bin/dach_resort_advisor report` | Full terminal dashboard (monthly snapshot, leaderboards, QC, summaries). |
+| `julia --project=. bin/dach_resort_advisor list` | Lists every available DACH region that can be queried. |
+| `julia --project=. bin/dach_resort_advisor region "Zermatt"` | Deep dive into one resort (replace `"Zermatt"` with any region name from the list). |
+| `julia --project=. bin/dach_resort_advisor report --season WINTER` | Run the dashboard focusing on winter months only (accepts `WINTER`, `SUMMER`, `ALL`). |
+| `julia --project=. bin/dach_resort_advisor report --from 2024-11-01 --to 2025-04-30` | Limit the data window using custom date filters. |
 
-```bash
-julia --project=. -e 'import Pkg; Pkg.activate("."); Pkg.instantiate()'
-
-Build processed data
-This creates data/processed/resorts_processed.csv from your raw file:
-
-julia --project=. scripts/build_resorts.jl
-
-List available resorts
-julia --project=. bin/ski_lookup.jl --list
-
-Query one resort
-julia --project=. bin/ski_lookup.jl --name "NAME_OF_RESORT_FROM_LIST"
+Environment helpers: set `REGION="Verbier"` to preselect a region or `CSV_PATH=/path/to/data.csv` to override the dataset before running the script.

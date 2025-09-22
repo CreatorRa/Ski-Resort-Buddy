@@ -1,1 +1,10 @@
+Pkg.add("CSV")
+Pkg.add("DataFrames")
+Pkg.add("CSVFiles")
 
+using CSV
+using DataFrames
+using Statistics
+
+df = CSV.read("C:Users\Carter\Documents\Ski-Resort-Buddy\Cleandata\ski-regions-data.csv,DataFrame")
+first(df,10)

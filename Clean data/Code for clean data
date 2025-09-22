@@ -8,5 +8,10 @@ using CSV
 using DataFrames
 using Statistics
 
-df = CSV.read("C:\Users\Carter\Documents\Ski-Resort-Buddy\Cleandata\ski-regions-data.csv")
+filepath = "C:\\Users\\Carter\\Documents\\Ski-Resort-Buddy\\Cleandata\\ski-regions-data.csv"
+
+# Tell CSV.read to use DataFrame as the "sink" for the data
+df = CSV.read(filepath, DataFrame)
+
+# Displays the the first 10 rows in a dataframe
 first(df,10)

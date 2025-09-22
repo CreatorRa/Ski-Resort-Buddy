@@ -8,5 +8,5 @@ using CSV
 using DataFrames
 using Statistics
 
-df = CSV.read("C:Users\Carter\Documents\Ski-Resort-Buddy\Cleandata\ski-regions-data.csv,DataFrame")
+df = CSV.read("C:\Users\Carter\Documents\Ski-Resort-Buddy\Cleandata\ski-regions-data.csv")
 first(df,10)

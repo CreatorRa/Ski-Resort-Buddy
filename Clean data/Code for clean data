@@ -17,3 +17,4 @@ df2 = CSV.read(filepath2, DataFrame)
 
 # Displays the the first 10 rows in a dataframe
 first(df,10)
+first(df2,10)

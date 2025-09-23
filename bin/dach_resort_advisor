@@ -98,10 +98,29 @@ const METRIC_WEIGHT_FLAGS = Dict(
 )
 
 # ----------------------------- Utils -----------------------------------------
+"""
+    slower(x)
+
+Return the lowercase string representation of `x` while tolerating any input type.
+Used to implement case-insensitive comparisons throughout the data prep pipeline.
+"""
 slower(x) = lowercase(String(x))
 import Base: lowercase
+"""
+    Base.lowercase(x::Symbol)
+
+Overload of `lowercase` so symbols participate in the `slower` conversions without
+additional calls to `String` in the call sites.
+"""
 lowercase(x::Symbol) = lowercase(String(x))
 
+"""
+    slugify(name)
+
+Transform a region name into a filesystem-friendly slug used for naming plot files.
+Non alphanumeric characters collapse into underscores and redundant underscores are
+removed to keep filenames tidy.
+"""
 function slugify(name::AbstractString)
     slug = lowercase(strip(name))
     slug = replace(slug, r"[^a-z0-9]+" => "_")
@@ -110,11 +129,24 @@ function slugify(name::AbstractString)
     return slug == "" ? "region" : slug
 end
 
+"""
+    ensure_plot_dir()
+
+Create the `plots/` output directory on demand and return its absolute path. This is
+called before saving any generated PNGs to guarantee the destination exists.
+"""
 function ensure_plot_dir()
     isdir(PLOTS_OUTPUT_DIR) || mkpath(PLOTS_OUTPUT_DIR)
     return PLOTS_OUTPUT_DIR
 end
 
+"""
+    clean_numeric_series(dates, values)
+
+Pair a date vector with numeric values while skipping missing or non-parsable entries.
+Returns two aligned vectors (`Date[]`, `Float64[]`) suitable for plotting time-series
+metrics.
+"""
 function clean_numeric_series(dates::AbstractVector, values::AbstractVector)
     xs = Date[]
     ys = Float64[]
@@ -136,16 +168,34 @@ function clean_numeric_series(dates::AbstractVector, values::AbstractVector)
     return xs, ys
 end
 
+"""
+    clone_metric_weights()
+
+Return a fresh copy of the default metric weights dictionary so downstream callers can
+mutate the map without affecting the global defaults.
+"""
 function clone_metric_weights()
     return Dict(key => DEFAULT_METRIC_WEIGHTS[key] for (key, _) in METRIC_WEIGHT_CONFIG)
 end
 
+"""
+    parse_weight_value(raw)
+
+Normalise user-provided weight strings by trimming whitespace, converting commas to
+decimal points, and attempting to parse a `Float64`. Returns `nothing` on failure.
+"""
 function parse_weight_value(raw::AbstractString)
     normalized = replace(strip(raw), "," => ".")
     val = tryparse(Float64, normalized)
     return val
 end
 
+"""
+    parse_bool(value)
+
+Interpret typical boolean string forms (`"true"`, `"1"`, `"yes"`, etc.) and return
+`true`/`false`, or `nothing` when the token cannot be classified.
+"""
 function parse_bool(value::AbstractString)
     normalized = lowercase(strip(value))
     normalized in ("1", "true", "yes", "y", "on") && return true
@@ -153,6 +203,12 @@ function parse_bool(value::AbstractString)
     return nothing
 end
 
+"""
+    apply_weight_env_overrides!(weights)
+
+Apply environment-variable overrides (`WEIGHT_*`) to the weight dictionary in-place.
+Invalid values emit warnings while leaving the current weight untouched.
+"""
 function apply_weight_env_overrides!(weights::Dict{Symbol,Float64})
     for (key, cfg) in METRIC_WEIGHT_CONFIG
         env_key = cfg.env
@@ -168,9 +224,64 @@ function apply_weight_env_overrides!(weights::Dict{Symbol,Float64})
     return weights
 end
 
+"""
+    prompt_metric_weights!(weights; force=false)
+
+Interactively collect metric weights from the user. Non-interactive sessions can set
+`force=true` to display the prompt regardless of TTY detection. Inputs must be between
+0 and 100 and the final sum must equal 100.
+"""
+function prompt_metric_weights!(weights::Dict{Symbol,Float64}; force::Bool=false)
+    if !(stdin_is_tty() || force)
+        println("[INFO] Gewichtungsabfrage übersprungen (nicht-interaktive Sitzung).")
+        return weights
+    end
+    println("\n== Gewichtung der Metriken ==")
+    println("Bitte für jede Metrik eine Wichtigkeit zwischen 0 und 100 eingeben. Die Summe muss 100 ergeben.")
+    for (key, cfg) in METRIC_WEIGHT_CONFIG
+        default = get(weights, key, 0.0)
+        while true
+            print("$(cfg.prompt) [$(round(default; digits=2))]: ")
+            response = try
+                readline()
+            catch err
+                isa(err, InterruptException) && rethrow()
+                ""
+            end
+            response = strip(response)
+            response == "" && break
+            parsed = parse_weight_value(response)
+            if parsed === nothing || parsed < 0 || parsed > 100
+                println("  -> Bitte einen Wert zwischen 0 und 100 eingeben.")
+                continue
+            end
+            weights[key] = parsed
+            break
+        end
+    end
+    total = sum(values(weights))
+    if !(abs(total - 100.0) <= 1e-6)
+        println("\nDie Summe der Gewichte beträgt $(round(total; digits=2)). Bitte erneut eingeben.")
+        return prompt_metric_weights!(weights; force=force)
+    end
+    return weights
+end
+
+"""
+    normalize_weights!(weights)
+
+Scale all weight values so that their sum equals 100. When the total is non-positive,
+the defaults are restored.
+"""
 function normalize_weights!(weights::Dict{Symbol,Float64})
-    total = sum(abs, values(weights))
-    total <= eps(Float64) && return weights
+    total = sum(values(weights))
+    if total <= eps(Float64)
+        @warn "Weight sum <= 0. Reverting to defaults." current=weights
+        for (key, value) in DEFAULT_METRIC_WEIGHTS
+            weights[key] = value
+        end
+        return weights
+    end
     factor = 100.0 / total
     for (key, value) in weights
         weights[key] = value * factor
@@ -178,35 +289,27 @@ function normalize_weights!(weights::Dict{Symbol,Float64})
     return weights
 end
 
-function prompt_metric_weights!(weights::Dict{Symbol,Float64}; force::Bool=false)
-    if !(stdin_is_tty() || force)
-        println("[INFO] Gewichtungsabfrage übersprungen (nicht-interaktive Sitzung).")
-        return weights
-    end
-    println("\n== Gewichtung der Metriken ==")
-    println("Leer lassen übernimmt den Standardwert. Negative Werte sind erlaubt, um hohe Werte zu bestrafen.")
-    println("Am Ende werden alle Gewichte so skaliert, dass ihre Beträge insgesamt 100% ergeben.")
-    for (key, cfg) in METRIC_WEIGHT_CONFIG
-        default = get(weights, key, 0.0)
-        print("$(cfg.prompt) [$(round(default; digits=2))]: ")
-        response = try
-            readline()
-        catch err
-            isa(err, InterruptException) && rethrow()
-            ""
-        end
-        response = strip(response)
-        response == "" && continue
-        parsed = parse_weight_value(response)
-        if parsed === nothing
-            println("  -> Eingabe nicht erkannt, Standard bleibt unverändert.")
-            continue
-        end
-        weights[key] = parsed
+"""
+    prepare_weights!(weights; force, prompt)
+
+Optionally prompt the user for custom weights (honouring forced prompts for non-TTY
+sessions). Returns the mutated dictionary for convenience.
+"""
+function prepare_weights!(weights::Dict{Symbol,Float64}; force::Bool, prompt::Bool)
+    if prompt
+        prompt_metric_weights!(weights; force=force)
+    else
+        normalize_weights!(weights)
     end
     return weights
 end
 
+"""
+    add_weighted_score!(df, weights)
+
+Compute a weighted composite metric using the provided weights and append it as the
+`WeightedScore` column. Missing or constant series fall back to neutral values.
+"""
 function add_weighted_score!(df::DataFrame, weights::Dict{Symbol,Float64})
     isempty(df) && return df
     scores = zeros(Float64, nrow(df))
@@ -242,6 +345,12 @@ function add_weighted_score!(df::DataFrame, weights::Dict{Symbol,Float64})
     return df
 end
 
+"""
+    find_date_column(df)
+
+Heuristically locate the column that contains date information by scanning common
+keywords (`date`, `datum`, etc.). Returns `nothing` when no suitable column exists.
+"""
 function find_date_column(df::DataFrame)
     cols_lower = Dict(slower(c) => Symbol(c) for c in names(df))
     for key in ("date","datum","day","tag","datetime","timestamp")
@@ -258,6 +367,12 @@ function find_date_column(df::DataFrame)
     return nothing
 end
 
+"""
+    lininterp!(v)
+
+Fill gaps in a numeric vector by performing linear interpolation between known values.
+Leading/trailing missings copy the nearest observed neighbour.
+"""
 function lininterp!(v::AbstractVector{T}) where {T}
     n = length(v)
     firstidx = findfirst(!ismissing, v)
@@ -291,6 +406,12 @@ function lininterp!(v::AbstractVector{T}) where {T}
     return v
 end
 
+"""
+    rolling_mean(v, window)
+
+Return a simple centred rolling mean over the numeric vector `v`. When the window is
+smaller than two, the original series is returned.
+"""
 function rolling_mean(v::AbstractVector{T}, w::Int) where {T<:Real}
     n = length(v)
     w <= 1 && return collect(v)
@@ -304,6 +425,12 @@ function rolling_mean(v::AbstractVector{T}, w::Int) where {T<:Real}
     return out
 end
 
+"""
+    normalize_columns!(df)
+
+Rename known data columns (temperature, snow, etc.) to consistent display labels so the
+downstream reporting code can address them reliably.
+"""
 function normalize_columns!(df::DataFrame)
     ren = Dict{Symbol,Symbol}()
     for c in names(df)
@@ -329,6 +456,12 @@ function normalize_columns!(df::DataFrame)
 end
 
 # ----------------------------- Load & Prep -----------------------------------
+"""
+    search_for_csv(filename)
+
+Walk the project tree to locate a CSV file by name. Used as a fallback when the file
+is not found in the expected locations.
+"""
 function search_for_csv(filename::String)
     for (root, _, files) in walkdir(ROOT_DIR)
         if filename in files
@@ -338,11 +471,23 @@ function search_for_csv(filename::String)
     return nothing
 end
 
+"""
+    normalize_path(path)
+
+Strip surrounding whitespace from a path string and coerce empty results to `nothing`.
+This keeps CLI and ENV overrides consistent with optional argument semantics.
+"""
 function normalize_path(p::String)
     cp = strip(p)
     return cp == "" ? nothing : cp
 end
 
+"""
+    resolve_csv_path(csv_path)
+
+Determine the CSV file to load by checking CLI/ENV overrides, default locations, and a
+recursive search. Returns an absolute path or `nothing` when nothing can be found.
+"""
 function resolve_csv_path(csv_path::Union{Nothing,String})
     requested = csv_path === nothing ? get(ENV, "CSV_PATH", nothing) : csv_path
     requested = requested === nothing ? nothing : normalize_path(String(requested))
@@ -379,6 +524,12 @@ function resolve_csv_path(csv_path::Union{Nothing,String})
     return nothing
 end
 
+"""
+    load_data([csv_path])
+
+Load the resort dataset into a `DataFrame`, normalise column names/types, and ensure
+dates are sorted. Raises an error when no CSV can be located.
+"""
 function load_data(csv_path::Union{Nothing,String}=nothing)
     path = resolve_csv_path(csv_path)
     path === nothing && error("CSV not found. Set CSV_PATH env variable, pass a path argument, or keep $(CSV_FILE_NAME) in the project directory.")
@@ -438,11 +589,23 @@ function load_data(csv_path::Union{Nothing,String}=nothing)
     return df
 end
 
+"""
+    canonical_country(value)
+
+Map various country labels (ISO codes, German spellings, etc.) to a consistent English
+name. Unknown inputs pass through unchanged after trimming.
+"""
 function canonical_country(value)
     key = uppercase(strip(String(value)))
     get(DACH_SYNONYMS, key, strip(String(value)))
 end
 
+"""
+    add_newsnow!(df)
+
+Append a `Snow_New (cm)` column that captures day-to-day snow depth increases per
+region/country grouping. Flat or negative changes become zero.
+"""
 function add_newsnow!(df::DataFrame)
     sn = Symbol("Snow Depth (cm)")
     if !hasproperty(df, sn)
@@ -467,12 +630,23 @@ function add_newsnow!(df::DataFrame)
 end
 
 # ----------------------------- CLI Config ------------------------------------
+"""
+    RunArgs
+
+Container for time/season filters parsed from CLI arguments or environment variables.
+"""
 struct RunArgs
     fromdate::Union{Nothing,Date}
     todate::Union{Nothing,Date}
     season::String
 end
 
+"""
+    CLIConfig
+
+High-level configuration for a script run, tracking the subcommand, dataset location,
+filters, user-selected region, weight map, and menu-specific state.
+"""
 struct CLIConfig
     command::Symbol
     csv_path::Union{Nothing,String}
@@ -483,16 +657,22 @@ struct CLIConfig
     menu_country::Union{Nothing,String}
 end
 
+"""
+    parse_cli()
+
+Parse CLI arguments and environment variables into a `CLIConfig`, including the active
+subcommand, data path, filters, weight overrides, and menu-specific flags.
+"""
 function parse_cli()
     from_str = get(ENV, "FROM_DATE", nothing)
     to_str = get(ENV, "TO_DATE", nothing)
     season = uppercase(get(ENV, "SEASON", "ALL"))
     csv_path = get(ENV, "CSV_PATH", nothing)
     region_focus = get(ENV, "REGION", nothing)
-    command = :report
+    command = :menu
     weights = clone_metric_weights()
     apply_weight_env_overrides!(weights)
-    force_prompt = false
+    force_prompt = true
     if haskey(ENV, "FORCE_WEIGHT_PROMPT")
         parsed = parse_bool(ENV["FORCE_WEIGHT_PROMPT"])
         if parsed !== nothing
@@ -581,6 +761,12 @@ function parse_cli()
     return CLIConfig(command, csv_path, runargs, region_focus, weights, force_prompt, nothing)
 end
 
+"""
+    in_season(date, season)
+
+Return `true` when the provided `Date` falls within the specified season keyword.
+`WINTER` spans November–April, `SUMMER` May–October, and everything else accepts all.
+"""
 function in_season(d::Date, season::String)
     m = month(d)
     season == "WINTER" && return m in (11,12,1,2,3,4)
@@ -588,6 +774,12 @@ function in_season(d::Date, season::String)
     return true
 end
 
+"""
+    apply_filters(df, runargs)
+
+Apply region/country/environment filters along with optional date bounds and season
+restrictions, returning a filtered copy of the DataFrame.
+"""
 function apply_filters(df::DataFrame, rargs::RunArgs)
     region = get(ENV, "REGION", nothing)
     country = get(ENV, "COUNTRY", nothing)
@@ -610,6 +802,12 @@ function apply_filters(df::DataFrame, rargs::RunArgs)
 end
 
 # ----------------------------- QC Checks -------------------------------------
+"""
+    qc_checks(df)
+
+Run a series of lightweight quality checks on the filtered dataset, printing warnings
+for missing days or implausible metric values.
+"""
 function qc_checks(df::DataFrame)
     println("\n== QC Checks ==")
     issues = false
@@ -678,10 +876,21 @@ const TABLE_HIGHLIGHTERS = [
     PrettyTables.TextHighlighter((data, i, j) -> data[i, j] isa Number && data[i, j] < 0, NEGATIVE_CRAYON)
 ]
 
+"""
+    styled_table(data; kwargs...)
+
+Wrapper around `pretty_table` that applies consistent highlighters for alternating
+rows and positive/negative values across all reports.
+"""
 function styled_table(data; kwargs...)
     pretty_table(data; highlighters=TABLE_HIGHLIGHTERS, kwargs...)
 end
 
+"""
+    available_regions(df)
+
+Return a sorted list of distinct region names present in the dataset.
+"""
 function available_regions(df::DataFrame)
     if !hasproperty(df, :Region)
         return String[]
@@ -692,6 +901,11 @@ function available_regions(df::DataFrame)
     return raw
 end
 
+"""
+    available_countries(df)
+
+Return a sorted list of distinct country names extracted from the dataset.
+"""
 function available_countries(df::DataFrame)
     if !hasproperty(df, :Country)
         return String[]
@@ -702,7 +916,13 @@ function available_countries(df::DataFrame)
     return raw
 end
 
-function filter_country(df::DataFrame, country::Union{Nothing,String})
+"""
+    filter_country(df, country)
+
+Filter rows to those matching the supplied `country` (case-insensitive). When
+`country === nothing`, the original DataFrame is returned.
+"""
+function filter_country(df::DataFrame, country::Union{Nothing,AbstractString})
     if country === nothing || !hasproperty(df, :Country)
         return df
     end
@@ -710,6 +930,12 @@ function filter_country(df::DataFrame, country::Union{Nothing,String})
     return filter(:Country => x -> !ismissing(x) && slower(String(x)) == target, df)
 end
 
+"""
+    print_available_regions(regions)
+
+Write a bullet list of region names to the terminal, with a fallback message when none
+are available.
+"""
 function print_available_regions(regions::AbstractVector{<:AbstractString})
     println("== Available Regions ==")
     if isempty(regions)
@@ -722,6 +948,12 @@ function print_available_regions(regions::AbstractVector{<:AbstractString})
     println()
 end
 
+"""
+    collect_valid(values)
+
+Gather numeric entries from `values`, skipping missing, `nothing`, or `NaN` entries and
+returning a `Vector{Float64}` for statistical processing.
+"""
 function collect_valid(v)
     out = Float64[]
     for x in v
@@ -740,6 +972,12 @@ function collect_valid(v)
     return out
 end
 
+"""
+    metric_stats(values)
+
+Build a short statistics table (count, mean, median, extrema, standard deviation) for
+the provided numeric vector.
+"""
 function metric_stats(values::Vector{Float64})
     if isempty(values)
         return DataFrame(Statistic=String[], Value=Any[])
@@ -755,6 +993,12 @@ function metric_stats(values::Vector{Float64})
     return DataFrame(Statistic = first.(stats), Value = Any[x[2] for x in stats])
 end
 
+"""
+    print_data_preview(df; limit=5)
+
+Show the first and last `limit` rows of the DataFrame using the shared table styling,
+helpful for quick sanity checks.
+"""
 function print_data_preview(df::DataFrame; limit::Int=5)
     rows = min(limit, nrow(df))
     println("\n== Data Preview — first $(rows) rows ==")
@@ -765,6 +1009,13 @@ function print_data_preview(df::DataFrame; limit::Int=5)
     end
 end
 
+"""
+    current_month_subset(df)
+
+Return the current (or latest available) month label and the DataFrame rows
+belonging to that month. When the dataset lacks dates, a sentinel `(Date(0),
+DataFrame())` tuple is returned.
+"""
 function current_month_subset(df::DataFrame)
     if !hasproperty(df, :Date) || isempty(df)
         return (Date(0), DataFrame())
@@ -779,6 +1030,12 @@ function current_month_subset(df::DataFrame)
     return (label_date, subset)
 end
 
+"""
+    print_current_month_overview(df)
+
+Summarise key metrics for the current (or latest) month, printing averages and
+extremes where data is available, and friendly info messages otherwise.
+"""
 function print_current_month_overview(df::DataFrame)
     label_date, subset = current_month_subset(df)
     label = isempty(subset) ? "n/a" : string(Dates.monthname(month(label_date)), " ", year(label_date))
@@ -809,12 +1066,25 @@ function print_current_month_overview(df::DataFrame)
     styled_table(DataFrame(rows))
 end
 
+"""
+    safe_stat(values, reducer)
+
+Apply `reducer` to the numeric subset of `values`, returning `missing` when no
+valid entries are present.
+"""
 function safe_stat(v, f::Function)
     vals = collect_valid(v)
     isempty(vals) && return missing
     return f(vals)
 end
 
+"""
+    metric_group_summary(df; groupcol, ycol)
+
+Group `df` by `groupcol` (e.g., Region or Country) and tabulate counts plus summary
+statistics for the metric column `ycol`. No output is produced when prerequisites are
+missing.
+"""
 function metric_group_summary(df::DataFrame; groupcol::Symbol, ycol::Symbol)
     if !hasproperty(df, groupcol) || !hasproperty(df, ycol)
         return
@@ -835,6 +1105,12 @@ function metric_group_summary(df::DataFrame; groupcol::Symbol, ycol::Symbol)
     styled_table(grouped)
 end
 
+"""
+    recent_conditions(df; recent_days=14)
+
+Return a slice of the last `recent_days` observations, including available metrics and
+identifying columns (`Date`, `Region`, `Country`).
+"""
 function recent_conditions(df::DataFrame; recent_days::Int=14)
     if isempty(df)
         return DataFrame()
@@ -853,6 +1129,12 @@ function recent_conditions(df::DataFrame; recent_days::Int=14)
     return slice
 end
 
+"""
+    print_daily_scoreboard(df; top_n=5)
+
+Show a snowfall leaderboard for the most recent day with data, returning the table as
+a DataFrame for further processing.
+"""
 function print_daily_scoreboard(df::DataFrame; top_n::Int=5)
     snow_col = Symbol("Snow_New (cm)")
     if !hasproperty(df, :Date) || !hasproperty(df, snow_col)
@@ -904,6 +1186,13 @@ function print_daily_scoreboard(df::DataFrame; top_n::Int=5)
     return scoreboard
 end
 
+"""
+    print_monthly_overview_for_all_regions(df; weights=DEFAULT_METRIC_WEIGHTS, display=true)
+
+Aggregate the most recent month of data per region (and optional country), compute
+summaries for the configured metrics, and add a weighted score used for ranking.
+When `display` is `false`, the table is returned silently for reuse in other views.
+"""
 function print_monthly_overview_for_all_regions(df::DataFrame; weights::Dict{Symbol,Float64}=DEFAULT_METRIC_WEIGHTS, display::Bool=true)
     if !hasproperty(df, :Date)
         display && println("\n[INFO] No Date column available - cannot build the monthly overview.")
@@ -982,6 +1271,12 @@ function print_monthly_overview_for_all_regions(df::DataFrame; weights::Dict{Sym
     return (table=aggregated, label=month_label)
 end
 
+"""
+    stdin_is_tty()
+
+Check whether standard input is attached to a terminal, accounting for platforms where
+`isatty` might throw. Used to decide if interactive prompts should be shown.
+"""
 function stdin_is_tty()
     if isdefined(Base, :isatty)
         try
@@ -1000,6 +1295,12 @@ function stdin_is_tty()
     return false
 end
 
+"""
+    print_active_filters(config, df)
+
+Print the currently active season/date/region/country filters along with dataset row
+counts so users understand the scope of subsequent tables.
+"""
 function print_active_filters(config::CLIConfig, df::DataFrame)
     println("\n== Active Filters ==")
     rargs = config.runargs
@@ -1030,6 +1331,12 @@ function print_active_filters(config::CLIConfig, df::DataFrame)
     end
 end
 
+"""
+    print_active_weights(weights)
+
+Print the currently normalised weights as percentages and show the sum of absolute
+weights for reference.
+"""
 function print_active_weights(weights::Dict{Symbol,Float64})
     println("\n== Aktive Gewichte ==")
     for (key, cfg) in METRIC_WEIGHT_CONFIG
@@ -1040,6 +1347,12 @@ function print_active_weights(weights::Dict{Symbol,Float64})
     println("   Summe(|Gewichte|) = $(total_abs)%")
 end
 
+"""
+    prompt_region_choice(df, scoreboard, config)
+
+Ask the user to pick a region for deeper analysis, offering suggestions from the
+scoreboard or the full region list. Returns the resolved region name or `nothing`.
+"""
 function prompt_region_choice(df::DataFrame, scoreboard::DataFrame, config::CLIConfig)
     preselected = config.region_focus
     if preselected !== nothing && strip(String(preselected)) != ""
@@ -1080,6 +1393,12 @@ function prompt_region_choice(df::DataFrame, scoreboard::DataFrame, config::CLIC
     end
 end
 
+"""
+    prompt_country_choice(df)
+
+Interactively prompt the user to select one of the available countries, returning the
+chosen name as a string or `nothing` when the input is blank or cancelled.
+"""
 function prompt_country_choice(df::DataFrame)
     countries = available_countries(df)
     if isempty(countries)
@@ -1103,16 +1422,22 @@ function prompt_country_choice(df::DataFrame)
         input == "" && return nothing
         parsed_idx = tryparse(Int, input)
         if parsed_idx !== nothing && 1 <= parsed_idx <= length(countries)
-            return countries[parsed_idx]
+            return String(countries[parsed_idx])
         end
         idx = findfirst(c -> slower(c) == slower(input), countries)
         if idx !== nothing
-            return countries[idx]
+            return String(countries[idx])
         end
         println("Nicht erkannt. Bitte Nummer oder Namen erneut eingeben (Enter für Abbruch).")
     end
 end
 
+"""
+    print_decision_hints(scoreboard, monthly_table, weights)
+
+Derive narrative tips from the current leaderboard and weighted monthly overview,
+pointing users toward notable regions (powder, calm wind, precipitation extremes).
+"""
 function print_decision_hints(scoreboard::DataFrame, monthly_table::DataFrame, weights::Dict{Symbol,Float64})
     println("\n== Decision Support ==")
     hints = String[]
@@ -1173,6 +1498,12 @@ function print_decision_hints(scoreboard::DataFrame, monthly_table::DataFrame, w
     end
 end
 
+"""
+    print_region_history(df, region_name; months=12)
+
+Display per-month averages and totals for the chosen region across the past `months`
+period, offering historical context in the regional deep dive view.
+"""
 function print_region_history(df::DataFrame, region_name::Union{Nothing,AbstractString}; months::Int=12)
     if isnothing(region_name)
         return
@@ -1228,6 +1559,12 @@ function print_region_history(df::DataFrame, region_name::Union{Nothing,Abstract
     styled_table(grouped)
 end
 
+"""
+    region_top_snow_events(df; top_n=5)
+
+Return the top `top_n` snowfall gain days for a region, including associated snow
+depth and temperature where available.
+"""
 function region_top_snow_events(df::DataFrame; top_n::Int=5)
     col = Symbol("Snow_New (cm)")
     if !hasproperty(df, col)
@@ -1248,6 +1585,13 @@ function region_top_snow_events(df::DataFrame; top_n::Int=5)
     return slice[1:min(top_n, nrow(slice)), :]
 end
 
+"""
+    save_region_snow_plot(region_df, region_name; recent_days=90)
+
+Plot snow depth (line) and new snow (bars) for `recent_days` of data and save the chart
+to `plots/<slug>_snow_trend.png`. Returns the generated filepath or `nothing` when
+plotting is skipped.
+"""
 function save_region_snow_plot(region_df::DataFrame, region_name::AbstractString; recent_days::Int=90)
     required_cols = (:Date, Symbol("Snow Depth (cm)"))
     if any(col -> !hasproperty(region_df, col), required_cols)
@@ -1293,6 +1637,12 @@ function save_region_snow_plot(region_df::DataFrame, region_name::AbstractString
     return out_path
 end
 
+"""
+    print_available_commands()
+
+Print the supported CLI commands along with helpful example invocations and relevant
+environment variables.
+"""
 function print_available_commands()
     println()
     printstyled("Available commands\n"; color=:cyan, bold=true)
@@ -1309,9 +1659,26 @@ function print_available_commands()
     printstyled("Region example:"; color=:magenta, bold=true); println(" $(COMMAND_PREFIX) region \"Zermatt\"")
 end
 
+"""
+    build_report_config(base; weights, country=nothing)
+
+Produce a `CLIConfig` tailored for report execution, optionally pinning a menu-selected
+country while preserving other settings from `base`.
+"""
+function build_report_config(base::CLIConfig; weights::Dict{Symbol,Float64}, country::Union{Nothing,String}=nothing)
+    return CLIConfig(:report, base.csv_path, base.runargs, base.region_focus, weights, base.force_weight_prompt, country)
+end
+
+"""
+    run_menu(df, config)
+
+Drive the interactive main menu, letting users start the report for all countries,
+filter by a chosen country, or exit the application.
+"""
 function run_menu(df::DataFrame, config::CLIConfig)
-    weights = deepcopy(config.weights)
+    base_weights = deepcopy(config.weights)
     while true
+        weights = deepcopy(base_weights)
         println("\n==== DACH Resort Advisor Menu ====")
         println("1) Start (alle Länder)")
         println("2) Land wählen und starten")
@@ -1325,27 +1692,27 @@ function run_menu(df::DataFrame, config::CLIConfig)
             return
         end
         if choice in ("1", "s", "start")
-            prompt_metric_weights!(weights; force=config.force_weight_prompt)
-            normalize_weights!(weights)
-            base_config = CLIConfig(:report, config.csv_path, config.runargs, config.region_focus, weights, config.force_weight_prompt, nothing)
-            run_report(df, base_config, weights)
+            prepare_weights!(weights; force=config.force_weight_prompt, prompt=true)
+            report_config = build_report_config(config; weights=weights)
+            run_report(df, report_config, weights)
+            base_weights = deepcopy(weights)
         elseif choice in ("2", "l", "land")
             country = prompt_country_choice(df)
             if country === nothing
                 println("[INFO] Kein Land ausgewählt – zeige alle Länder.")
-                base_config = CLIConfig(:report, config.csv_path, config.runargs, config.region_focus, weights, config.force_weight_prompt, nothing)
-                run_report(df, base_config, weights)
+                report_config = build_report_config(config; weights=weights)
+                run_report(df, report_config, weights)
                 continue
             end
-            filtered = filter_country(df, String(country))
+            filtered = filter_country(df, country)
             if isempty(filtered)
                 println("[INFO] Keine Daten für $(country) vorhanden.")
                 continue
             end
-            prompt_metric_weights!(weights; force=config.force_weight_prompt)
-            normalize_weights!(weights)
-            local_config = CLIConfig(:report, config.csv_path, config.runargs, config.region_focus, weights, config.force_weight_prompt, country)
+            prepare_weights!(weights; force=config.force_weight_prompt, prompt=true)
+            local_config = build_report_config(config; weights=weights, country=country)
             run_report(filtered, local_config, weights)
+            base_weights = deepcopy(weights)
         elseif choice in ("q", "quit", "exit")
             println("Auf Wiedersehen!")
             return
@@ -1357,6 +1724,13 @@ function run_menu(df::DataFrame, config::CLIConfig)
     end
 end
 
+"""
+    run_report(df, config, weights)
+
+Drive the primary reporting workflow: display filters and weights, show leaderboards
+and monthly aggregates, prompt for a region deep dive, and optionally extend with
+detailed analytics.
+"""
 function run_report(df::DataFrame, config::CLIConfig, weights::Dict{Symbol,Float64})
     print_active_filters(config, df)
     print_active_weights(weights)
@@ -1404,10 +1778,21 @@ function run_report(df::DataFrame, config::CLIConfig, weights::Dict{Symbol,Float
     end
 end
 
+"""
+    run_list(df)
+
+Print the alphabetised list of regions present in the dataset.
+"""
 function run_list(df::DataFrame)
     print_available_regions(available_regions(df))
 end
 
+"""
+    resolve_region_name(df, name)
+
+Resolve a user-supplied region string to an exact dataset entry, returning the match
+and a list of suggestions when no exact hit is found.
+"""
 function resolve_region_name(df::DataFrame, name::AbstractString)
     regs = available_regions(df)
     target = slower(name)
@@ -1420,6 +1805,12 @@ function resolve_region_name(df::DataFrame, name::AbstractString)
     return (nothing, suggestions)
 end
 
+"""
+    run_region(df, region_name; weights=DEFAULT_METRIC_WEIGHTS, monthly_table=nothing)
+
+Render the region deep dive, including high-level metadata, monthly summaries, recent
+conditions, historical aggregates, and plot generation for the chosen region.
+"""
 function run_region(df::DataFrame, region_name::Union{Nothing,String}; weights::Dict{Symbol,Float64}=DEFAULT_METRIC_WEIGHTS, monthly_table::Union{Nothing,DataFrame}=nothing)
     if region_name === nothing || strip(String(region_name)) == ""
         println("Please provide a region name, e.g. `$(COMMAND_PREFIX) region \"Zermatt\"`.")
@@ -1500,6 +1891,12 @@ function run_region(df::DataFrame, region_name::Union{Nothing,String}; weights::
 end
 
 # ----------------------------- Main ------------------------------------------
+"""
+    main()
+
+Top-level entry point: assemble the CLI configuration, load data, apply filters, and
+dispatch to the appropriate subcommand before printing closing guidance.
+"""
 function main()
     config = parse_cli()
     df = load_data(config.csv_path)
@@ -1514,8 +1911,7 @@ function main()
 
     weights = config.weights
     if config.command in (:report, :region)
-        prompt_metric_weights!(weights; force=config.force_weight_prompt)
-        normalize_weights!(weights)
+        prepare_weights!(weights; force=config.force_weight_prompt, prompt=true)
     end
 
     if config.command == :list

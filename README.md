@@ -52,6 +52,7 @@ Create a foundation for future extensions
 
 Environment helpers: set `REGION="Verbier"` to preselect a region or `CSV_PATH=/path/to/data.csv` to override the dataset before running the script.
 The menu allows you to choose a country interactively before launching the dashboard; leave the prompt empty to analyse all countries.
+Calling the script without arguments now opens the menu automatically.
 
 ## 📈 Snow Trend Plots
 
@@ -65,13 +66,9 @@ The menu allows you to choose a country interactively before launching the dashb
 
 ## 🎚️ Custom Metric Weights
 
-- When the dashboard runs in an interactive terminal, you can assign weights to core metrics (fresh snow, snow depth, temperature, precipitation, wind).
-- Leave the prompt blank to keep the default. Negative weights penalise high values (e.g. warmer temperatures).
-- Inputs are automatically rescaled so that the absolute weights sum to 100%, keeping relative priorities intact.
-- Non-interactive runs can pass weights up front:
-  ```bash
-  julia --project=. bin/dach_resort_advisor report --weight-snow-new 1.5 --weight-temperature -0.8
-  ```
-- Environment variables work too (`WEIGHT_SNOW_NEW=1.2 WEIGHT_WIND=-0.4 ...`).
-- In Umgebungen ohne TTY (z. B. VS Code Debugger) erzwingt `--ask-weights` bzw. `FORCE_WEIGHT_PROMPT=true` den interaktiven Dialog.
-- The monthly overview shows a `WeightedScore` column ranked using your current weights; the region deep-dives echo the same score for the selected resort.
+- Vor dem Start kannst (und musst) du die Wichtigkeit der fünf Kernmetriken (Frischer Schnee, Schneehöhe, Temperatur, Niederschlag, Wind) auf einer Skala von 0–100 eingeben.
+- Die Summe muss 100 ergeben; das Menü fordert dich bei Bedarf erneut zur Eingabe auf.
+- Standardwerte (gesamt 100): 30/25/20/15/10
+- Nicht-interaktive Läufe können die Werte vorab setzen, z. B. `--weight-snow-new 40 --weight-temperature 10`.
+- Der Dialog erscheint standardmäßig; nutze `--no-ask-weights` bzw. `FORCE_WEIGHT_PROMPT=false`, um ihn zu unterdrücken.
+- Die Monatsübersicht zeigt den daraus resultierenden `WeightedScore`; Regionsreports spiegeln denselben Score wider.

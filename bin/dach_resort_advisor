@@ -26,6 +26,8 @@
 # Season definitions (by month):
 #   WINTER = Nov–Apr (11,12,1,2,3,4) | SUMMER = May–Oct (5..10)
 
+# Author, John , Shayan, Isaac, Carter
+
 using CSV
 using DataFrames
 using Dates

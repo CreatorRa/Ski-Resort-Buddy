@@ -1,5 +1,36 @@
 # menu.jl
 # A simple Julia menu where users can navigate up and down for ski project
+#<<<<<<< safe-commit
+#=======
+# Define the menu options
+# This array stores the text that will appear in the menu.
+# Each string is one selectable option
+
+# Function: display_menu
+# Purpose: Show the menu to the user and highlight the current selection.
+# Parameters:
+#   - options: the list of menu options
+#   - current_index: the currently selected option
+# Process:
+#   - Loops through each option
+#   - If it's the selected option, mark it with ->
+#   - Otherwise, print it with spaces in front
+
+# Function: run_menu
+# Purpose: Control the menu navigation loop
+# Process:
+#   - Starts with the first option selected
+#   - Continuously displays the menu
+#   - Reads user input:
+#       * "w" = move up
+#       * "s" = move down
+#       * Enter = select
+#       * "q" = quit
+#   - Updates the highlighted option or performs an action
+
+# Run the menu program
+# This calls the run_menu() function to actually start the menu system.
+# >>>>>>> main
 
 function show_menu(options::Vector{String}, current_index::Int)
     println("\n--- Main Menu ---")
@@ -14,7 +45,7 @@ function show_menu(options::Vector{String}, current_index::Int)
 end
 
 function run_menu()
-    options = ["Start Game", "Settings", "Help", "Exit"]
+    options = ["Start Menu", "Settings", "Help", "Exit"]
     current_index = 1
 
     while true

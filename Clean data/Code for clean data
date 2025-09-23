@@ -1,1 +1,20 @@
+import Pkg
 
+Pkg.add("CSV")
+Pkg.add("DataFrames")
+Pkg.add("CSVFiles")
+
+using CSV
+using DataFrames
+using Statistics
+
+filepath = "C:\\Users\\Carter\\Documents\\Ski-Resort-Buddy\\Cleandata\\ski-regions-data.csv"
+filepath2 = "C:\\Users\\Carter\\Documents\\Ski-Resort-Buddy\\Cleandata\\resorts.csv"
+
+# Tell CSV.read to use DataFrame as the "sink" for the data
+df = CSV.read(filepath, DataFrame)
+df2 = CSV.read(filepath2, DataFrame)
+
+# Displays the the first 10 rows in a dataframe
+first(df,10)
+first(df2,10)

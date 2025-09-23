@@ -73,6 +73,30 @@ const DACH_SYNONYMS = Dict(
     "CHE" => "Switzerland"
 )
 
+const METRIC_WEIGHT_CONFIG = (
+    :snow_new => (column=Symbol("Avg Snow_New (cm)"), prompt="Frischer Schnee (Avg Snow_New cm)", env="WEIGHT_SNOW_NEW"),
+    :snow_depth => (column=Symbol("Avg Snow Depth (cm)"), prompt="Schneehöhe (Avg Snow Depth cm)", env="WEIGHT_SNOW_DEPTH"),
+    :temperature => (column=Symbol("Avg Temperature (°C)"), prompt="Temperatur (Avg Temperature °C)", env="WEIGHT_TEMPERATURE"),
+    :precipitation => (column=Symbol("Avg Precipitation (mm)"), prompt="Niederschlag (Avg Precipitation mm)", env="WEIGHT_PRECIPITATION"),
+    :wind => (column=Symbol("Avg Wind (Beaufort)"), prompt="Wind (Avg Wind Beaufort)", env="WEIGHT_WIND")
+)
+
+const DEFAULT_METRIC_WEIGHTS = Dict(
+    :snow_new => 1.0,
+    :snow_depth => 0.8,
+    :temperature => -0.5,
+    :precipitation => -0.2,
+    :wind => -0.2
+)
+
+const METRIC_WEIGHT_FLAGS = Dict(
+    "--weight-snow-new" => :snow_new,
+    "--weight-snow-depth" => :snow_depth,
+    "--weight-temperature" => :temperature,
+    "--weight-precipitation" => :precipitation,
+    "--weight-wind" => :wind
+)
+
 # ----------------------------- Utils -----------------------------------------
 slower(x) = lowercase(String(x))
 import Base: lowercase
@@ -110,6 +134,112 @@ function clean_numeric_series(dates::AbstractVector, values::AbstractVector)
         push!(ys, val)
     end
     return xs, ys
+end
+
+function clone_metric_weights()
+    return Dict(key => DEFAULT_METRIC_WEIGHTS[key] for (key, _) in METRIC_WEIGHT_CONFIG)
+end
+
+function parse_weight_value(raw::AbstractString)
+    normalized = replace(strip(raw), "," => ".")
+    val = tryparse(Float64, normalized)
+    return val
+end
+
+function parse_bool(value::AbstractString)
+    normalized = lowercase(strip(value))
+    normalized in ("1", "true", "yes", "y", "on") && return true
+    normalized in ("0", "false", "no", "n", "off") && return false
+    return nothing
+end
+
+function apply_weight_env_overrides!(weights::Dict{Symbol,Float64})
+    for (key, cfg) in METRIC_WEIGHT_CONFIG
+        env_key = cfg.env
+        if haskey(ENV, env_key)
+            parsed = parse_weight_value(ENV[env_key])
+            if parsed !== nothing
+                weights[key] = parsed
+            else
+                @warn "Ignoring invalid weight from ENV" env_key value=ENV[env_key]
+            end
+        end
+    end
+    return weights
+end
+
+function normalize_weights!(weights::Dict{Symbol,Float64})
+    total = sum(abs, values(weights))
+    total <= eps(Float64) && return weights
+    factor = 100.0 / total
+    for (key, value) in weights
+        weights[key] = value * factor
+    end
+    return weights
+end
+
+function prompt_metric_weights!(weights::Dict{Symbol,Float64}; force::Bool=false)
+    if !(stdin_is_tty() || force)
+        println("[INFO] Gewichtungsabfrage übersprungen (nicht-interaktive Sitzung).")
+        return weights
+    end
+    println("\n== Gewichtung der Metriken ==")
+    println("Leer lassen übernimmt den Standardwert. Negative Werte sind erlaubt, um hohe Werte zu bestrafen.")
+    println("Am Ende werden alle Gewichte so skaliert, dass ihre Beträge insgesamt 100% ergeben.")
+    for (key, cfg) in METRIC_WEIGHT_CONFIG
+        default = get(weights, key, 0.0)
+        print("$(cfg.prompt) [$(round(default; digits=2))]: ")
+        response = try
+            readline()
+        catch err
+            isa(err, InterruptException) && rethrow()
+            ""
+        end
+        response = strip(response)
+        response == "" && continue
+        parsed = parse_weight_value(response)
+        if parsed === nothing
+            println("  -> Eingabe nicht erkannt, Standard bleibt unverändert.")
+            continue
+        end
+        weights[key] = parsed
+    end
+    return weights
+end
+
+function add_weighted_score!(df::DataFrame, weights::Dict{Symbol,Float64})
+    isempty(df) && return df
+    scores = zeros(Float64, nrow(df))
+    contributed = falses(nrow(df))
+    any_metric = false
+    for (key, cfg) in METRIC_WEIGHT_CONFIG
+        weight = get(weights, key, 0.0)
+        weight == 0.0 && continue
+        column = cfg.column
+        column ∈ names(df) || continue
+        vals = df[!, column]
+        valid = collect(skipmissing(vals))
+        isempty(valid) && continue
+        minv = minimum(valid)
+        maxv = maximum(valid)
+        rangev = maxv - minv
+        any_metric = true
+        for (idx, raw) in enumerate(vals)
+            raw === missing && continue
+            v = Float64(raw)
+            normalized = rangev == 0 ? 0.5 : (v - minv) / rangev
+            scores[idx] += weight * normalized
+            contributed[idx] = true
+        end
+    end
+    if any_metric
+        df[!, :WeightedScore] = map(eachindex(scores)) do i
+            contributed[i] ? round(scores[i]; digits=3) : missing
+        end
+    else
+        df[!, :WeightedScore] = fill(missing, nrow(df))
+    end
+    return df
 end
 
 function find_date_column(df::DataFrame)
@@ -348,6 +478,9 @@ struct CLIConfig
     csv_path::Union{Nothing,String}
     runargs::RunArgs
     region_focus::Union{Nothing,String}
+    weights::Dict{Symbol,Float64}
+    force_weight_prompt::Bool
+    menu_country::Union{Nothing,String}
 end
 
 function parse_cli()
@@ -357,12 +490,25 @@ function parse_cli()
     csv_path = get(ENV, "CSV_PATH", nothing)
     region_focus = get(ENV, "REGION", nothing)
     command = :report
+    weights = clone_metric_weights()
+    apply_weight_env_overrides!(weights)
+    force_prompt = false
+    if haskey(ENV, "FORCE_WEIGHT_PROMPT")
+        parsed = parse_bool(ENV["FORCE_WEIGHT_PROMPT"])
+        if parsed !== nothing
+            force_prompt = parsed
+        else
+            @warn "Ignoring invalid FORCE_WEIGHT_PROMPT env value" value=ENV["FORCE_WEIGHT_PROMPT"]
+        end
+    end
 
     i = 1
     while i <= length(ARGS)
         arg = ARGS[i]
         if arg == "report"
             command = :report
+        elseif arg == "menu"
+            command = :menu
         elseif arg == "list"
             command = :list
         elseif arg == "region" && i < length(ARGS)
@@ -377,6 +523,34 @@ function parse_cli()
             season = uppercase(ARGS[i+1]); i += 1
         elseif arg == "--csv" && i < length(ARGS)
             csv_path = ARGS[i+1]; i += 1
+        elseif arg == "--ask-weights"
+            force_prompt = true
+        elseif arg == "--no-ask-weights"
+            force_prompt = false
+        elseif startswith(arg, "--weight-")
+            flag = arg
+            value = nothing
+            if occursin('=', arg)
+                parts = split(arg, "=", limit=2)
+                flag = parts[1]
+                value = parts[2]
+            elseif i < length(ARGS)
+                value = ARGS[i+1]
+                i += 1
+            end
+            key = get(METRIC_WEIGHT_FLAGS, flag, nothing)
+            if key === nothing
+                @warn "Unbekannte Gewichtungsoption" arg
+            elseif value === nothing
+                @warn "Option $(flag) benötigt einen numerischen Wert"
+            else
+                parsed = parse_weight_value(value)
+                if parsed === nothing
+                    @warn "Gewicht konnte nicht interpretiert werden" flag value
+                else
+                    weights[key] = parsed
+                end
+            end
         elseif startswith(arg, "--")
             @warn "Unknown option" arg
         elseif csv_path === nothing
@@ -401,8 +575,10 @@ function parse_cli()
         nothing
     end
 
+    normalize_weights!(weights)
+
     runargs = RunArgs(from_date, to_date, season)
-    return CLIConfig(command, csv_path, runargs, region_focus)
+    return CLIConfig(command, csv_path, runargs, region_focus, weights, force_prompt, nothing)
 end
 
 function in_season(d::Date, season::String)
@@ -514,6 +690,24 @@ function available_regions(df::DataFrame)
     unique!(raw)
     sort!(raw)
     return raw
+end
+
+function available_countries(df::DataFrame)
+    if !hasproperty(df, :Country)
+        return String[]
+    end
+    raw = [strip(string(c)) for c in skipmissing(df.Country) if strip(string(c)) != ""]
+    unique!(raw)
+    sort!(raw)
+    return raw
+end
+
+function filter_country(df::DataFrame, country::Union{Nothing,String})
+    if country === nothing || !hasproperty(df, :Country)
+        return df
+    end
+    target = slower(String(country))
+    return filter(:Country => x -> !ismissing(x) && slower(String(x)) == target, df)
 end
 
 function print_available_regions(regions::AbstractVector{<:AbstractString})
@@ -710,9 +904,9 @@ function print_daily_scoreboard(df::DataFrame; top_n::Int=5)
     return scoreboard
 end
 
-function print_monthly_overview_for_all_regions(df::DataFrame)
+function print_monthly_overview_for_all_regions(df::DataFrame; weights::Dict{Symbol,Float64}=DEFAULT_METRIC_WEIGHTS, display::Bool=true)
     if !hasproperty(df, :Date)
-        println("\n[INFO] No Date column available - cannot build the monthly overview.")
+        display && println("\n[INFO] No Date column available - cannot build the monthly overview.")
         return (table=DataFrame(), label="")
     end
     metrics_map = [
@@ -724,20 +918,20 @@ function print_monthly_overview_for_all_regions(df::DataFrame)
     ]
     available_metrics = [col for (col, _) in metrics_map if hasproperty(df, col)]
     if isempty(available_metrics)
-        println("\n[INFO] No numeric metrics available to build the monthly overview.")
+        display && println("\n[INFO] No numeric metrics available to build the monthly overview.")
         return (table=DataFrame(), label="")
     end
 
     month_df = transform(copy(df), :Date => ByRow(d -> Date(year(d), month(d), 1)) => :Month)
     unique_months = unique(month_df.Month)
     if isempty(unique_months)
-        println("\n[INFO] Monthly overview not available (no month values detected).")
+        display && println("\n[INFO] Monthly overview not available (no month values detected).")
         return (table=DataFrame(), label="")
     end
     focus_month = maximum(unique_months)
     month_subset = filter(:Month => m -> m == focus_month, month_df)
     if isempty(month_subset)
-        println("\n[INFO] No rows for the monthly overview.")
+        display && println("\n[INFO] No rows for the monthly overview.")
         return (table=DataFrame(), label="")
     end
 
@@ -754,7 +948,7 @@ function print_monthly_overview_for_all_regions(df::DataFrame)
 
     aggregated = combine(groupby(month_subset, group_cols), transformations...)
     if isempty(aggregated)
-        println("\n[INFO] Monthly overview could not be generated (empty grouping result).")
+        display && println("\n[INFO] Monthly overview could not be generated (empty grouping result).")
         return (table=DataFrame(), label="")
     end
 
@@ -768,14 +962,23 @@ function print_monthly_overview_for_all_regions(df::DataFrame)
         end
     end
 
-    sort_col = Symbol("Avg Snow_New (cm)")
+    add_weighted_score!(aggregated, weights)
+
+    sort_col = if :WeightedScore in names(aggregated) && any(x -> x !== missing, aggregated[!, :WeightedScore])
+        :WeightedScore
+    else
+        Symbol("Avg Snow_New (cm)")
+    end
+
     if sort_col in names(aggregated)
         sort!(aggregated, sort_col, rev=true, by=x -> x isa Missing ? -Inf : Float64(x))
     end
 
     month_label = Dates.format(focus_month, "yyyy-mm")
-    println("\n== Monthly Overview - Regional Averages for $(month_label) ==")
-    styled_table(aggregated)
+    if display
+        println("\n== Monthly Overview - Regional Averages for $(month_label) ==")
+        styled_table(aggregated)
+    end
     return (table=aggregated, label=month_label)
 end
 
@@ -813,11 +1016,28 @@ function print_active_filters(config::CLIConfig, df::DataFrame)
     else
         println(" - No region preselected")
     end
+    if config.menu_country !== nothing
+        println(" - Country filter (menu): $(config.menu_country)")
+    elseif haskey(ENV, "COUNTRY")
+        println(" - Country filter (ENV): " * ENV["COUNTRY"])
+    else
+        println(" - No country preselected")
+    end
     if !isempty(df) && hasproperty(df, :Date)
         println(" - Observations after filters: $(nrow(df)) rows, window $(string(minimum(df.Date))) - $(string(maximum(df.Date)))")
     else
         println(" - No data available after applying filters")
     end
+end
+
+function print_active_weights(weights::Dict{Symbol,Float64})
+    println("\n== Aktive Gewichte ==")
+    for (key, cfg) in METRIC_WEIGHT_CONFIG
+        value = get(weights, key, 0.0)
+        println(" - $(cfg.prompt): $(round(value; digits=2))%")
+    end
+    total_abs = round(sum(abs, values(weights)); digits=2)
+    println("   Summe(|Gewichte|) = $(total_abs)%")
 end
 
 function prompt_region_choice(df::DataFrame, scoreboard::DataFrame, config::CLIConfig)
@@ -860,7 +1080,40 @@ function prompt_region_choice(df::DataFrame, scoreboard::DataFrame, config::CLIC
     end
 end
 
-function print_decision_hints(scoreboard::DataFrame, monthly_table::DataFrame)
+function prompt_country_choice(df::DataFrame)
+    countries = available_countries(df)
+    if isempty(countries)
+        println("[INFO] Keine Länderinformation im Datensatz verfügbar.")
+        return nothing
+    end
+    println("\nVerfügbare Länder:")
+    for (idx, country) in enumerate(countries)
+        println(" $(idx)) $(country)")
+    end
+    println("Wähle eine Nummer oder gib den Ländernamen ein (leer für alle Länder).")
+    while true
+        print("> ")
+        input = try
+            strip(readline())
+        catch err
+            isa(err, InterruptException) && rethrow()
+            println("[INFO] Eingabe abgebrochen: " * string(err))
+            return nothing
+        end
+        input == "" && return nothing
+        parsed_idx = tryparse(Int, input)
+        if parsed_idx !== nothing && 1 <= parsed_idx <= length(countries)
+            return countries[parsed_idx]
+        end
+        idx = findfirst(c -> slower(c) == slower(input), countries)
+        if idx !== nothing
+            return countries[idx]
+        end
+        println("Nicht erkannt. Bitte Nummer oder Namen erneut eingeben (Enter für Abbruch).")
+    end
+end
+
+function print_decision_hints(scoreboard::DataFrame, monthly_table::DataFrame, weights::Dict{Symbol,Float64})
     println("\n== Decision Support ==")
     hints = String[]
     if !isempty(scoreboard) && all(col -> col in names(scoreboard), [Symbol("Region"), Symbol("Snow_New (cm)")])
@@ -868,6 +1121,24 @@ function print_decision_hints(scoreboard::DataFrame, monthly_table::DataFrame)
         snow_val = top_row[Symbol("Snow_New (cm)")]
         snow_label = (snow_val === missing || snow_val === nothing) ? "" : string(round(Float64(snow_val); digits=1)) * " cm"
         push!(hints, "Fresh powder in $(top_row.Region) $(snow_label)")
+    end
+
+    if :WeightedScore in names(monthly_table)
+        best_idx = nothing
+        best_score = -Inf
+        for (idx, score) in enumerate(monthly_table[!, :WeightedScore])
+            if score === missing
+                continue
+            end
+            if score > best_score
+                best_score = score
+                best_idx = idx
+            end
+        end
+        if best_idx !== nothing
+            region_name = monthly_table[best_idx, :Region]
+            region_name !== missing && push!(hints, @sprintf("Beste Gesamtwertung: %s (Score %.2f)", string(region_name), best_score))
+        end
     end
 
     function best_hint(df::DataFrame, col::Symbol; rev::Bool=false, label::String="", unit::String="")
@@ -1025,27 +1296,78 @@ end
 function print_available_commands()
     println()
     printstyled("Available commands\n"; color=:cyan, bold=true)
+    printstyled("  menu          "; color=:green, bold=true); println("- interactive terminal menu")
     printstyled("  report        "; color=:green, bold=true); println("- default full dashboard (this view)")
     printstyled("  list          "; color=:green, bold=true); println("- list all DACH regions")
     printstyled("  region NAME   "; color=:green, bold=true); println("- deep dive into a single resort (replace NAME)")
     println()
     printstyled("Options:"; color=:yellow, bold=true); println(" --from YYYY-MM-DD | --to YYYY-MM-DD | --season WINTER|SUMMER|ALL")
-    printstyled("Environment:"; color=:yellow, bold=true); println(" REGION, CSV_PATH")
+    printstyled("Weights:"; color=:yellow, bold=true); println(" --weight-snow-new <v> | --weight-temperature <v> | ... (Prompt via --ask-weights)")
+    printstyled("Environment:"; color=:yellow, bold=true); println(" REGION, CSV_PATH, WEIGHT_SNOW_NEW, ...")
     println()
-    printstyled("Quick copy:"; color=:magenta, bold=true); println(" $(COMMAND_PREFIX) report")
+    printstyled("Quick copy:"; color=:magenta, bold=true); println(" $(COMMAND_PREFIX) menu")
     printstyled("Region example:"; color=:magenta, bold=true); println(" $(COMMAND_PREFIX) region \"Zermatt\"")
 end
 
-function run_report(df::DataFrame, config::CLIConfig)
+function run_menu(df::DataFrame, config::CLIConfig)
+    weights = deepcopy(config.weights)
+    while true
+        println("\n==== DACH Resort Advisor Menu ====")
+        println("1) Start (alle Länder)")
+        println("2) Land wählen und starten")
+        println("q) Quit")
+        print("> ")
+        choice = try
+            lowercase(strip(readline()))
+        catch err
+            isa(err, InterruptException) && rethrow()
+            println("[INFO] Input aborted: " * string(err))
+            return
+        end
+        if choice in ("1", "s", "start")
+            prompt_metric_weights!(weights; force=config.force_weight_prompt)
+            normalize_weights!(weights)
+            base_config = CLIConfig(:report, config.csv_path, config.runargs, config.region_focus, weights, config.force_weight_prompt, nothing)
+            run_report(df, base_config, weights)
+        elseif choice in ("2", "l", "land")
+            country = prompt_country_choice(df)
+            if country === nothing
+                println("[INFO] Kein Land ausgewählt – zeige alle Länder.")
+                base_config = CLIConfig(:report, config.csv_path, config.runargs, config.region_focus, weights, config.force_weight_prompt, nothing)
+                run_report(df, base_config, weights)
+                continue
+            end
+            filtered = filter_country(df, String(country))
+            if isempty(filtered)
+                println("[INFO] Keine Daten für $(country) vorhanden.")
+                continue
+            end
+            prompt_metric_weights!(weights; force=config.force_weight_prompt)
+            normalize_weights!(weights)
+            local_config = CLIConfig(:report, config.csv_path, config.runargs, config.region_focus, weights, config.force_weight_prompt, country)
+            run_report(filtered, local_config, weights)
+        elseif choice in ("q", "quit", "exit")
+            println("Auf Wiedersehen!")
+            return
+        elseif choice == ""
+            println("Bitte eine Option wählen (Start oder Quit).")
+        else
+            println("Unbekannte Auswahl: $(choice)")
+        end
+    end
+end
+
+function run_report(df::DataFrame, config::CLIConfig, weights::Dict{Symbol,Float64})
     print_active_filters(config, df)
+    print_active_weights(weights)
 
     scoreboard = print_daily_scoreboard(df; top_n=10)
-    monthly = print_monthly_overview_for_all_regions(df)
-    print_decision_hints(scoreboard, monthly.table)
+    monthly = print_monthly_overview_for_all_regions(df; weights=weights)
+    print_decision_hints(scoreboard, monthly.table, weights)
 
     selected_region = prompt_region_choice(df, scoreboard, config)
     if selected_region !== nothing
-        run_region(df, selected_region)
+        run_region(df, selected_region; weights=weights, monthly_table=monthly.table)
     else
         println("\nTip: use `list` to see every region or `region <NAME>` for an immediate deep dive.")
     end
@@ -1098,7 +1420,7 @@ function resolve_region_name(df::DataFrame, name::AbstractString)
     return (nothing, suggestions)
 end
 
-function run_region(df::DataFrame, region_name::Union{Nothing,String})
+function run_region(df::DataFrame, region_name::Union{Nothing,String}; weights::Dict{Symbol,Float64}=DEFAULT_METRIC_WEIGHTS, monthly_table::Union{Nothing,DataFrame}=nothing)
     if region_name === nothing || strip(String(region_name)) == ""
         println("Please provide a region name, e.g. `$(COMMAND_PREFIX) region \"Zermatt\"`.")
         run_list(df)
@@ -1126,6 +1448,9 @@ function run_region(df::DataFrame, region_name::Union{Nothing,String})
 
     println("== Region Overview — $(actual) ==")
     println(@sprintf("Country: %s | Observations: %d | Date range: %s to %s", country_label, nrow(region_df), string(minimum(region_df.Date)), string(maximum(region_df.Date))))
+    if monthly_table === nothing
+        print_active_weights(weights)
+    end
 
     print_current_month_overview(region_df)
     events = region_top_snow_events(region_df; top_n=5)
@@ -1155,6 +1480,23 @@ function run_region(df::DataFrame, region_name::Union{Nothing,String})
     elseif plot_ok
         println("\n[INFO] Snow trend plot skipped (missing numeric data).")
     end
+
+    score_source = monthly_table
+    if score_source === nothing
+        monthly_result = print_monthly_overview_for_all_regions(df; weights=weights, display=false)
+        score_source = monthly_result.table
+    end
+    if score_source isa DataFrame && !isempty(score_source) && :Region in names(score_source) && :WeightedScore in names(score_source)
+        idx = findfirst(1:nrow(score_source)) do i
+            region_value = score_source[i, :Region]
+            region_value === missing && return false
+            return slower(String(region_value)) == slower(actual)
+        end
+        if idx !== nothing
+            score_val = score_source[idx, :WeightedScore]
+            score_val !== missing && println(@sprintf("[INFO] Gewichteter Score (aktuelle Gewichte): %.2f", Float64(score_val)))
+        end
+    end
 end
 
 # ----------------------------- Main ------------------------------------------
@@ -1170,12 +1512,20 @@ function main()
         return
     end
 
+    weights = config.weights
+    if config.command in (:report, :region)
+        prompt_metric_weights!(weights; force=config.force_weight_prompt)
+        normalize_weights!(weights)
+    end
+
     if config.command == :list
         run_list(df)
     elseif config.command == :region
-        run_region(df, config.region_focus)
+        run_region(df, config.region_focus; weights=weights)
+    elseif config.command == :menu
+        run_menu(df, CLIConfig(:menu, config.csv_path, config.runargs, config.region_focus, weights, config.force_weight_prompt, nothing))
     else
-        run_report(df, config)
+        run_report(df, config, weights)
     end
 
     println("\nDone. Terminal reporting finished.")

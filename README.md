@@ -43,6 +43,7 @@ Create a foundation for future extensions
 
 | Command | Description |
 | --- | --- |
+| `julia --project=. bin/dach_resort_advisor menu` | Simple terminal menu (Start, optional country filter, Exit). |
 | `julia --project=. bin/dach_resort_advisor report` | Full terminal dashboard (monthly snapshot, leaderboards, QC, summaries). |
 | `julia --project=. bin/dach_resort_advisor list` | Lists every available DACH region that can be queried. |
 | `julia --project=. bin/dach_resort_advisor region "Zermatt"` | Deep dive into one resort (replace `"Zermatt"` with any region name from the list). |
@@ -50,6 +51,7 @@ Create a foundation for future extensions
 | `julia --project=. bin/dach_resort_advisor report --from 2024-11-01 --to 2025-04-30` | Limit the data window using custom date filters. |
 
 Environment helpers: set `REGION="Verbier"` to preselect a region or `CSV_PATH=/path/to/data.csv` to override the dataset before running the script.
+The menu allows you to choose a country interactively before launching the dashboard; leave the prompt empty to analyse all countries.
 
 ## 📈 Snow Trend Plots
 
@@ -60,3 +62,16 @@ Environment helpers: set `REGION="Verbier"` to preselect a region or `CSV_PATH=/
   ```bash
   julia --project=. -e 'import Pkg; Pkg.add("Plots")'
   ```
+
+## 🎚️ Custom Metric Weights
+
+- When the dashboard runs in an interactive terminal, you can assign weights to core metrics (fresh snow, snow depth, temperature, precipitation, wind).
+- Leave the prompt blank to keep the default. Negative weights penalise high values (e.g. warmer temperatures).
+- Inputs are automatically rescaled so that the absolute weights sum to 100%, keeping relative priorities intact.
+- Non-interactive runs can pass weights up front:
+  ```bash
+  julia --project=. bin/dach_resort_advisor report --weight-snow-new 1.5 --weight-temperature -0.8
+  ```
+- Environment variables work too (`WEIGHT_SNOW_NEW=1.2 WEIGHT_WIND=-0.4 ...`).
+- In Umgebungen ohne TTY (z. B. VS Code Debugger) erzwingt `--ask-weights` bzw. `FORCE_WEIGHT_PROMPT=true` den interaktiven Dialog.
+- The monthly overview shows a `WeightedScore` column ranked using your current weights; the region deep-dives echo the same score for the selected resort.

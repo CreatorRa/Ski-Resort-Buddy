@@ -1,5 +1,7 @@
 # menu.jl
 # A simple Julia menu where users can navigate up and down for ski project
+#<<<<<<< safe-commit
+#=======
 # Define the menu options
 # This array stores the text that will appear in the menu.
 # Each string is one selectable option
@@ -28,6 +30,7 @@
 
 # Run the menu program
 # This calls the run_menu() function to actually start the menu system.
+# >>>>>>> main
 
 function show_menu(options::Vector{String}, current_index::Int)
     println("\n--- Main Menu ---")

@@ -11,7 +11,7 @@
 #
 # Install deps once:
 #   import Pkg
-#   Pkg.add(["CSV","DataFrames","Dates","Statistics","Printf","PrettyTables"])
+#   Pkg.add(["CSV","DataFrames","Dates","Statistics","Printf","PrettyTables","Plots"])
 #
 # Run:
 #   julia --project=. bin/dach_resort_advisor
@@ -34,12 +34,17 @@ using Dates
 using Statistics
 using Printf
 using PrettyTables
+using Plots
 
 # ----------------------------- Config ----------------------------------------
 const ROOT_DIR   = abspath(joinpath(@__DIR__, ".."))
 const CSV_FILE_NAME = "ski-regions-data.csv"
 const CSV_PATH_DEFAULT = joinpath(ROOT_DIR, CSV_FILE_NAME)
 const COMMAND_PREFIX = "julia --project=. bin/dach_resort_advisor"
+const PLOTS_OUTPUT_DIR = joinpath(ROOT_DIR, "plots")
+
+gr()
+Plots.default(; fmt=:png, legend=:topright, size=(900, 500))
 
 const DACH_SYNONYMS = Dict(
     "AUSTRIA" => "Austria",
@@ -60,6 +65,40 @@ const DACH_SYNONYMS = Dict(
 slower(x) = lowercase(String(x))
 import Base: lowercase
 lowercase(x::Symbol) = lowercase(String(x))
+
+function slugify(name::AbstractString)
+    slug = lowercase(strip(name))
+    slug = replace(slug, r"[^a-z0-9]+" => "_")
+    slug = replace(slug, r"_+" => "_")
+    slug = strip(slug, '_')
+    return slug == "" ? "region" : slug
+end
+
+function ensure_plot_dir()
+    isdir(PLOTS_OUTPUT_DIR) || mkpath(PLOTS_OUTPUT_DIR)
+    return PLOTS_OUTPUT_DIR
+end
+
+function clean_numeric_series(dates::AbstractVector, values::AbstractVector)
+    xs = Date[]
+    ys = Float64[]
+    for (d, v) in zip(dates, values)
+        if v === missing || v === nothing
+            continue
+        end
+        val = try
+            Float64(v)
+        catch
+            continue
+        end
+        if isnan(val)
+            continue
+        end
+        push!(xs, Date(d))
+        push!(ys, val)
+    end
+    return xs, ys
+end
 
 function find_date_column(df::DataFrame)
     cols_lower = Dict(slower(c) => Symbol(c) for c in names(df))
@@ -926,6 +965,51 @@ function region_top_snow_events(df::DataFrame; top_n::Int=5)
     return slice[1:min(top_n, nrow(slice)), :]
 end
 
+function save_region_snow_plot(region_df::DataFrame, region_name::AbstractString; recent_days::Int=90)
+    required_cols = (:Date, Symbol("Snow Depth (cm)"))
+    if any(col -> !hasproperty(region_df, col), required_cols)
+        return nothing
+    end
+
+    local_df = sort(copy(region_df), :Date)
+    if recent_days > 0 && nrow(local_df) > recent_days
+        local_df = local_df[end - recent_days + 1:end, :]
+    end
+    isempty(local_df) && return nothing
+
+    dates = local_df[!, :Date]
+    depth_dates, depth_values = clean_numeric_series(dates, local_df[!, Symbol("Snow Depth (cm)")])
+    isempty(depth_values) && return nothing
+
+    plot_obj = plot(depth_dates, depth_values;
+        label="Snow depth (cm)",
+        color=:dodgerblue,
+        linewidth=2,
+        xlabel="Date",
+        ylabel="Centimetres",
+        title="$(region_name) — snow trend",
+        background_color=:white)
+
+    new_col = Symbol("Snow_New (cm)")
+    if hasproperty(local_df, new_col)
+        new_dates, new_values = clean_numeric_series(dates, local_df[!, new_col])
+        if !isempty(new_values)
+            plot!(plot_obj, new_dates, new_values;
+                seriestype=:bar,
+                label="Daily new snow (cm)",
+                color=:lightskyblue,
+                alpha=0.45,
+                bar_width=0.6)
+        end
+    end
+
+    ensure_plot_dir()
+    filename = slugify(region_name) * "_snow_trend.png"
+    out_path = joinpath(PLOTS_OUTPUT_DIR, filename)
+    savefig(plot_obj, out_path)
+    return out_path
+end
+
 function print_available_commands()
     println()
     printstyled("Available commands\n"; color=:cyan, bold=true)
@@ -1045,6 +1129,20 @@ function run_region(df::DataFrame, region_name::Union{Nothing,String})
     end
 
     print_region_history(region_df, actual; months=12)
+
+    plot_path = nothing
+    plot_ok = true
+    try
+        plot_path = save_region_snow_plot(region_df, actual; recent_days=120)
+    catch err
+        plot_ok = false
+        @warn "Unable to save snow trend plot" region=actual exception=(err, catch_backtrace())
+    end
+    if plot_path !== nothing
+        println("\n[INFO] Snow trend plot saved to: $(plot_path)")
+    elseif plot_ok
+        println("\n[INFO] Snow trend plot skipped (missing numeric data).")
+    end
 end
 
 # ----------------------------- Main ------------------------------------------

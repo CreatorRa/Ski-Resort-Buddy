@@ -1,8 +1,8 @@
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.11.6"
+julia_version = "1.11.7"
 manifest_format = "2.0"
-project_hash = "fc961e7960735a3c51bbea02479f98b573e21228"
+project_hash = "c98d0ecb345ec968aafa11a293f302ec319557d1"
 
 [[deps.AliasTables]]
 deps = ["PtrArrays", "Random"]
@@ -682,9 +682,9 @@ version = "1.5.0"
 
 [[deps.PrettyTables]]
 deps = ["Crayons", "LaTeXStrings", "Markdown", "PrecompileTools", "Printf", "REPL", "Reexport", "StringManipulation", "Tables"]
-git-tree-sha1 = "86e787c2c5e29c1ff9d0b72227bcc29d7d39e14e"
+git-tree-sha1 = "60f23271568238b236899d00fc290e43d1f2658f"
 uuid = "08abe8d2-0d0c-5749-adfa-8a2ac140af0d"
-version = "3.0.8"
+version = "3.0.10"
 
 [[deps.Printf]]
 deps = ["Unicode"]

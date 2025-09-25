@@ -23,6 +23,44 @@ const CSV_PATH_DEFAULT = joinpath(ROOT_DIR, CSV_FILE_NAME)
 const COMMAND_PREFIX = "julia --project=. bin/dach_resort_advisor"
 const PLOTS_OUTPUT_DIR = joinpath(ROOT_DIR, "plots")
 
+#---Main Logic with Saftey check---
+
+
+if isfile(CSV_PATH_DEFAULT)
+
+
+    println("File found at:", CSV_PATH_DEFAULT)
+
+
+    println("Reading data...")
+
+
+    
+
+
+    df = CSV.read(CSV_PATH_DEFAULT, DataFrame)
+
+
+    println("Display the first 10 rows:")
+
+
+    println(first(df, 10))
+
+
+else
+
+
+    println("File not found!")
+
+
+    println("Please ensure that the file 'ski-regions-data.csv' is located in the project directory.")
+
+
+
+
+end
+
+#---End of Main Logic with Saftey check---
 gr()
 Plots.default(; fmt=:png, legend=:topright, size=(900, 500))
 

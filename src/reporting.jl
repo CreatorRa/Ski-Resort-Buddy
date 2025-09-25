@@ -1,5 +1,4 @@
 """
-Reporting and visualisation layer: formats terminal output, aggregates metrics,
 and generates plots/prompts for both interactive and scripted dashboard flows.
 """
 

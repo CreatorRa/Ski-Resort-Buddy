@@ -6,6 +6,7 @@ using Dates
 using DataFrames
 using Plots
 using PrettyTables
+using Printf: @sprintf
 
 const HEADER_CRAYON = PrettyTables.Crayon(foreground=:cyan, bold=true)
 const STRIPE_CRAYON = PrettyTables.Crayon(background=:blue)
@@ -17,6 +18,10 @@ const TABLE_HIGHLIGHTERS = [
     PrettyTables.TextHighlighter((data, i, j) -> data[i, j] isa Number && data[i, j] > 0, POSITIVE_CRAYON),
     PrettyTables.TextHighlighter((data, i, j) -> data[i, j] isa Number && data[i, j] < 0, NEGATIVE_CRAYON)
 ]
+
+if !isdefined(@__MODULE__, :CLIConfig)
+    const CLIConfig = Any
+end
 
 const REGION_METRIC_OPTIONS = (
     (key=:snow_depth, column=Symbol("Snow Depth (cm)"), display="Schneehöhe (cm)", color=:dodgerblue, window=7, recent_days=180, plot=:line),

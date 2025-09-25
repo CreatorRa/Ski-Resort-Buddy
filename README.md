@@ -67,6 +67,7 @@ Calling the script without arguments now opens the menu automatically.
 ## 🎚️ Custom Metric Weights
 
 - Vor dem Start kannst (und musst) du die Wichtigkeit der fünf Kernmetriken (Frischer Schnee, Schneehöhe, Temperatur, Niederschlag, Wind) auf einer Skala von 0–100 eingeben.
+- Höhere Gewichte bedeuten: mehr frischer Schnee/Schneehöhe ist besser, während bei Temperatur, Niederschlag und Wind niedrigere Werte bevorzugt werden.
 - Die Summe muss 100 ergeben; das Menü fordert dich bei Bedarf erneut zur Eingabe auf.
 - Standardwerte (gesamt 100): 30/25/20/15/10
 - Nicht-interaktive Läufe können die Werte vorab setzen, z. B. `--weight-snow-new 40 --weight-temperature 10`.

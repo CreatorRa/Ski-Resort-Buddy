@@ -1,11 +1,10 @@
 # menu.jl
 # A simple Julia menu where users can navigate up and down for ski project
-#<<<<<<< safe-commit
-#=======
+#     FIRST
 # Define the menu options
 # This array stores the text that will appear in the menu.
 # Each string is one selectable option
-
+#    SECOND
 # Function: display_menu
 # Purpose: Show the menu to the user and highlight the current selection.
 # Parameters:
@@ -15,7 +14,7 @@
 #   - Loops through each option
 #   - If it's the selected option, mark it with ->
 #   - Otherwise, print it with spaces in front
-
+#    THIRD
 # Function: run_menu
 # Purpose: Control the menu navigation loop
 # Process:
@@ -27,7 +26,7 @@
 #       * Enter = select
 #       * "q" = quit
 #   - Updates the highlighted option or performs an action
-
+#    LASTLY, RUN/ENTER
 # Run the menu program
 # This calls the run_menu() function to actually start the menu system.
 # >>>>>>> main

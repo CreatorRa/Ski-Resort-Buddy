@@ -123,7 +123,47 @@ println("After removing suffix:")
 #println(Unique_values)
 #-- End of Germany Data processing --
 
-df_combined = vcat(df, df2)
+#-- Austria Data Processing ---
+filepath= "C:\\Users\\user\\Downloads\\data_monthly_AT_HZB.csv"
+df3 = CSV.read(filepath, DataFrame)
+
+first(df3, 5)  # Display the first 5 rows of the DataFrame to verify it loaded correctly
+
+colums_to_drop = [
+    "SCD1gt",
+    "SCD10",
+    "SCD20",	
+    "SCD30",	
+    "SCD50",	
+    "SCD100",
+    "HSmean_gapfill",
+    "frac_gapfilled",
+    "HSmax_gapfill",
+    "SCD1_gapfill",
+    "SCD1gt_gapfill",
+    "SCD10_gapfill",
+    "SCD20_gapfill",
+    "SCD30_gapfill",
+    "SCD50_gapfill",
+    "SCD100_gapfill"
+]
+select!(df3, Not(colums_to_drop))
+dropmissing!(df3, :HNsum) 
+
+
+rename!(df3, "Name" => "Region")
+rename!(df3, "HNsum" => "Snow Depth (cm)")
+rename!(df3, "HSmean" => "Mean Snow Depth (cm)")
+rename!(df3, "HSmax" => "Max Snow Depth (cm)")
+rename!(df3, "SCD1" => "Days where AVG Temp < 0C")
+rename!(df3, "year" => "Date")
+
+insertcols!(df3, 2, :Country => "Austria")
+first(df3, 10) 
+
+#--- End of Austria Data processing ---
+
+df_combined = vcat(df, df2, df3)
 println("Combined DataFrame has", nrow(df_combined),)
 
 println(first(df_combined, 10))

@@ -1,3 +1,5 @@
+
+
 """
 Dataset ingestion & transformation helpers: column detection/normalisation,
 interpolation, filtering, and CSV path resolution used prior to reporting.
@@ -180,7 +182,7 @@ function resolve_csv_path(csv_path::Union{Nothing,String})
 
     fallback = search_for_csv(CSV_FILE_NAME)
     if fallback !== nothing
-        @warn "Using fallback CSV" fallback
+        @warn t(:warn_using_fallback_csv) fallback=fallback
         return fallback
     end
 
@@ -195,13 +197,13 @@ dates are sorted. Raises an error when no CSV can be located.
 """
 function load_data(csv_path::Union{Nothing,String}=nothing)
     path = resolve_csv_path(csv_path)
-    path === nothing && error("CSV not found. Set CSV_PATH env variable, pass a path argument, or keep $(CSV_FILE_NAME) in the project directory.")
-    println("[INFO] Loading CSV: $(path)")
+    path === nothing && error(t(:error_csv_missing; default_file=CSV_FILE_NAME))
+    println(t(:info_loading_csv; path=path))
     df = CSV.read(path, DataFrame)
     rename!(df, Dict(c => Symbol(strip(String(c))) for c in names(df)))
 
     date_col = find_date_column(df)
-    isnothing(date_col) && error("No date column detected. Expecting something like 'Date'.")
+    isnothing(date_col) && error(t(:error_no_date_column))
 
     df[!, date_col] = DateTime.(df[!, date_col]) .|> Date
     sort!(df, date_col)

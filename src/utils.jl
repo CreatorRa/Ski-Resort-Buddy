@@ -97,48 +97,186 @@ function collect_valid(v)
 end
 
 """
-    metric_stats(values)
-
-Build a short statistics table (count, mean, median, extrema, standard deviation) for
-the provided numeric vector.
-"""
-function metric_stats(values::Vector{Float64})
-    if isempty(values)
-        return DataFrame(Statistic=String[], Value=Any[])
-    end
-    stats = [
-        ("Count", length(values)),
-        ("Mean", round(mean(values); digits=2)),
-        ("Median", round(median(values); digits=2)),
-        ("Minimum", round(minimum(values); digits=2)),
-        ("Maximum", round(maximum(values); digits=2)),
-        ("Std. Deviation", length(values) > 1 ? round(std(values); digits=2) : 0.0)
-    ]
-    return DataFrame(Statistic = first.(stats), Value = Any[x[2] for x in stats])
-end
-
-"""
     stdin_is_tty()
 
 Check whether standard input is attached to a terminal, accounting for platforms where
 `isatty` might throw. Used to decide if interactive prompts should be shown.
 """
 function stdin_is_tty()
-    if isdefined(Base, :isatty)
-        try
-            return Base.isatty(stdin)
-        catch
-            return false
+    fd = try
+        Base.fd(stdin)
+    catch
+        return false
+    end
+    fd < 0 && return false
+    try
+        return ccall(:isatty, Cint, (Cint,), fd) == 1
+    catch
+        return false
+    end
+end
+
+"""
+    normalize_speech_cmd(cmd)
+
+Trim and validate a speech command string, returning `nothing` when empty.
+"""
+function normalize_speech_cmd(cmd)
+    isnothing(cmd) && return nothing
+    text = strip(String(cmd))
+    return text == "" ? nothing : text
+end
+
+"""
+    current_speech_cmd()
+
+Return the speech command configured for this session (or `nothing`).
+"""
+current_speech_cmd() = SPEECH_CMD[]
+
+"""
+    set_speech_cmd!(cmd)
+
+Update the global speech command reference and return the effective value.
+"""
+function set_speech_cmd!(cmd)
+    SPEECH_CMD[] = normalize_speech_cmd(cmd)
+    return SPEECH_CMD[]
+end
+
+"""
+    run_speech_capture(cmd)
+
+Execute the configured speech command and return its trimmed stdout.
+"""
+function run_speech_capture(cmd::String)
+    if strip(cmd) == ""
+        return nothing
+    end
+    parts = try
+        Base.shell_split(cmd)
+    catch err
+        @warn "SPEECH_CMD konnte nicht geparst werden" command=cmd error=err
+        return nothing
+    end
+    isempty(parts) && return nothing
+    command = Cmd(parts; windows_verbatim=false)
+    try
+        output = read(command, String)
+        return strip(output)
+    catch err
+        isa(err, InterruptException) && rethrow()
+        @warn "Sprachbefehl fehlgeschlagen" command=cmd error=err
+        return nothing
+    end
+end
+
+"""
+    readline_with_speech([prompt]; kwargs...)
+
+Read a user input line, optionally running speech recognition before falling back to
+keyboard entry. Returns the trimmed string (may be empty).
+"""
+function readline_with_speech(prompt::AbstractString="> ";
+        speech_cmd::Union{Nothing,String}=current_speech_cmd(),
+        fallback_keyboard::Bool=true,
+        fallback_on_empty::Bool=true)
+
+    if speech_cmd !== nothing
+        print(prompt)
+        flush(stdout)
+        println(t(:speech_prompt_active))
+        spoken = run_speech_capture(speech_cmd)
+        if spoken !== nothing
+            trimmed = strip(spoken)
+            if trimmed != ""
+                println("↳ " * trimmed)
+                return trimmed
+            elseif fallback_on_empty && fallback_keyboard
+                println(t(:speech_no_result))
+            else
+                return trimmed
+            end
+        elseif fallback_keyboard
+            println(t(:speech_failed))
+        else
+            return ""
         end
     end
-    if isdefined(Base, :Libc) && isdefined(Base.Libc, :isatty)
-        try
-            return Base.Libc.isatty(Base.Libc.fileno(stdin)) == 1
-        catch
-            return false
+
+    print(prompt)
+    flush(stdout)
+    line = readline()
+    return strip(line)
+end
+
+"""
+    detect_speech_command()
+
+Return a best-guess speech command by probing for known CLI tools. Returns `nothing`
+when no suitable candidate is found.
+"""
+function detect_speech_command()
+    candidates = (
+        (joinpath(ROOT_DIR, "bin", "transcribe.sh"), "bash bin/transcribe.sh"),
+        (joinpath(ROOT_DIR, "bin", "transcribe.py"), "python3 bin/transcribe.py"),
+        (joinpath(ROOT_DIR, "bin", "transcribe.jl"), "julia --project=. bin/transcribe.jl"),
+        (joinpath(ROOT_DIR, "bin", "speech_cmd"), "bin/speech_cmd")
+    )
+    for (path, cmd) in candidates
+        if isfile(path)
+            return cmd
         end
     end
-    return false
+    return nothing
+end
+
+"""
+    maybe_prompt_speech_cmd!(current)
+
+Interactively ask whether speech input should be enabled. Returns the active command
+or `nothing` when skipped. Prompts only when running in a TTY.
+"""
+function maybe_prompt_speech_cmd!(current::Union{Nothing,String})
+    current !== nothing && return current
+    stdin_is_tty() || return nothing
+
+    println()
+    println(t(:speech_enable_prompt))
+    print("> ")
+    response = try
+        lowercase(strip(readline()))
+    catch err
+        isa(err, InterruptException) && rethrow()
+        ""
+    end
+    affirmative = response in ("y", "yes", "j", "ja")
+    affirmative || return nothing
+
+    suggestion = detect_speech_command()
+    if suggestion !== nothing
+        println(t(:speech_candidate_found; command=suggestion))
+        println(t(:speech_candidate_prompt))
+    else
+        println(t(:speech_candidate_request))
+        println(t(:speech_candidate_example))
+    end
+
+    print("> ")
+    chosen = try
+        strip(readline())
+    catch err
+        isa(err, InterruptException) && rethrow()
+        ""
+    end
+    effective = chosen == "" ? suggestion : chosen
+    effective = normalize_speech_cmd(effective)
+    if effective === nothing
+        println(t(:speech_disabled))
+        return nothing
+    end
+    println(t(:speech_enabled))
+    return set_speech_cmd!(effective)
 end
 
 """
@@ -192,12 +330,12 @@ Write a bullet list of region names to the terminal, with a fallback message whe
 are available.
 """
 function print_available_regions(regions::AbstractVector{<:AbstractString})
-    println("== Available Regions ==")
+    println(t(:regions_header))
     if isempty(regions)
-        println(" (no regions found)")
+        println(t(:regions_none))
     else
         for r in regions
-            println(" - $(r)")
+            println(t(:regions_entry; name=r))
         end
     end
     println()

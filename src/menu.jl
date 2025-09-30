@@ -1,17 +1,9 @@
+using .Localization: t
+
 """
 Interactive menu workflow: handles the TUI navigation to adjust weights, pick
 countries, and launch the reporting view with the desired configuration.
 """
-
-"""
-    build_report_config(base; weights, country=nothing)
-
-Produce a `CLIConfig` tailored for report execution, optionally pinning a menu-selected
-country while preserving other settings from `base`.
-"""
-function build_report_config(base::CLIConfig; weights::Dict{Symbol,Float64}, country::Union{Nothing,String}=nothing)
-    return CLIConfig(:report, base.csv_path, base.runargs, base.region_focus, weights, base.force_weight_prompt, country)
-end
 
 """
     prompt_country_choice(df)
@@ -22,21 +14,21 @@ chosen name as a string or `nothing` when the input is blank or cancelled.
 function prompt_country_choice(df::DataFrame)
     countries = available_countries(df)
     if isempty(countries)
-        println("[INFO] Keine Länderinformation im Datensatz verfügbar.")
+        println(t(:info_no_country_metadata))
         return nothing
     end
-    println("\nVerfügbare Länder:")
+    println()
+    println(t(:menu_available_countries_header))
     for (idx, country) in enumerate(countries)
-        println(" $(idx)) $(country)")
+        println(t(:menu_country_entry; index=idx, country=country))
     end
-    println("Wähle eine Nummer oder gib den Ländernamen ein (leer für alle Länder).")
+    println(t(:menu_country_prompt))
     while true
-        print("> ")
         input = try
-            strip(readline())
+            readline_with_speech("> ")
         catch err
             isa(err, InterruptException) && rethrow()
-            println("[INFO] Eingabe abgebrochen: " * string(err))
+            println(t(:info_input_aborted; error=string(err)))
             return nothing
         end
         input == "" && return nothing
@@ -48,7 +40,7 @@ function prompt_country_choice(df::DataFrame)
         if idx !== nothing
             return String(countries[idx])
         end
-        println("Nicht erkannt. Bitte Nummer oder Namen erneut eingeben (Enter für Abbruch).")
+        println(t(:menu_country_retry))
     end
 end
 
@@ -60,12 +52,11 @@ filter by a chosen country, or exit the application.
 """
 function ask_adjust_weights!(weights::Dict{Symbol,Float64})
     if !stdin_is_tty()
-        println("[INFO] Eingabe wird erwartet – falls keine Tastatureingabe möglich ist, breche mit Ctrl+C ab.")
+        println(t(:info_input_expected))
     end
-    println("Gewichtung anpassen? (y/N)")
-    print("> ")
+    println(t(:prompt_adjust_weights))
     response = try
-        lowercase(strip(readline()))
+        lowercase(readline_with_speech("> "))
     catch err
         isa(err, InterruptException) && rethrow()
         ""
@@ -78,22 +69,22 @@ function ask_adjust_weights!(weights::Dict{Symbol,Float64})
 end
 
 function report_config_for_menu(base::CLIConfig, weights::Dict{Symbol,Float64}; country::Union{Nothing,String}=nothing)
-    return CLIConfig(:report, base.csv_path, base.runargs, base.region_focus, weights, base.force_weight_prompt, country)
+    return CLIConfig(:report, base.csv_path, base.runargs, base.region_focus, weights, base.force_weight_prompt, country, base.speech_cmd, base.language, base.language_explicit)
 end
 
 function run_menu(df::DataFrame, config::CLIConfig)
     base_weights = deepcopy(config.weights)
     while true
-        println("\n==== Menü ====")
-        println("1) Überblick aller Regionen")
-        println("2) Land auswählen")
-        println("3) Beenden")
-        print("> ")
+        println()
+        println(t(:menu_header))
+        println(t(:menu_option_overview))
+        println(t(:menu_option_country))
+        println(t(:menu_option_exit))
         choice = try
-            lowercase(strip(readline()))
+            lowercase(readline_with_speech("> "))
         catch err
             isa(err, InterruptException) && rethrow()
-            println("[INFO] Input aborted: " * string(err))
+            println(t(:info_input_aborted; error=string(err)))
             return
         end
 
@@ -103,16 +94,17 @@ function run_menu(df::DataFrame, config::CLIConfig)
             adjusted && (base_weights = deepcopy(weights))
             report_config = report_config_for_menu(config, weights)
             run_report(df, report_config, weights)
-            println("\nZurück zum Menü...")
+            println()
+            println(t(:info_return_menu))
         elseif choice in ("2", "land", "l")
             country = prompt_country_choice(df)
             if country === nothing
-                println("[INFO] Keine Auswahl – kehre zum Menü zurück.")
+                println(t(:info_no_country_selection))
                 continue
             end
             filtered = filter_country(df, country)
             if isempty(filtered)
-                println("[INFO] Keine Daten für $(country) vorhanden.")
+                println(t(:info_no_data_for_country; country=country))
                 continue
             end
             weights = deepcopy(base_weights)
@@ -120,14 +112,15 @@ function run_menu(df::DataFrame, config::CLIConfig)
             adjusted && (base_weights = deepcopy(weights))
             local_config = report_config_for_menu(config, weights; country=country)
             run_report(filtered, local_config, weights)
-            println("\nZurück zum Menü...")
+            println()
+            println(t(:info_return_menu))
         elseif choice in ("3", "q", "quit", "exit", "beenden")
-            println("Auf Wiedersehen!")
+            println(t(:farewell))
             return
         elseif choice == ""
-            println("Bitte eine Option wählen.")
+            println(t(:menu_select_option))
         else
-            println("Unbekannte Auswahl: $(choice)")
+            println(t(:menu_unknown_choice; choice=choice))
         end
     end
 end

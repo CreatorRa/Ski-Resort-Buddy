@@ -7,6 +7,7 @@ using DataFrames
 using Plots
 using PrettyTables
 using Printf: @sprintf
+using .Localization: t
 
 const HEADER_CRAYON = PrettyTables.Crayon(foreground=:cyan, bold=true)
 const STRIPE_CRAYON = PrettyTables.Crayon(background=:blue)
@@ -24,11 +25,11 @@ if !isdefined(@__MODULE__, :CLIConfig)
 end
 
 const REGION_METRIC_OPTIONS = (
-    (key=:snow_depth, column=Symbol("Snow Depth (cm)"), display="Schneehöhe (cm)", color=:dodgerblue, window=7, recent_days=180, plot=:line),
-    (key=:snow_new, column=Symbol("Snow_New (cm)"), display="Neuschnee (cm)", color=:lightskyblue, window=5, recent_days=120, plot=:bar),
-    (key=:temperature, column=Symbol("Temperature (°C)"), display="Temperatur (°C)", color=:tomato, window=7, recent_days=180, plot=:line),
-    (key=:precipitation, column=Symbol("Precipitation (mm)"), display="Niederschlag (mm)", color=:seagreen, window=7, recent_days=180, plot=:line),
-    (key=:wind, column=Symbol("Wind (Beaufort)"), display="Wind (Beaufort)", color=:goldenrod, window=7, recent_days=180, plot=:line)
+    (key=:snow_depth, column=Symbol("Snow Depth (cm)"), display_key=:metric_snow_depth, aliases=("snow depth", "schneehöhe"), color=:dodgerblue, window=7, recent_days=180, plot=:line),
+    (key=:snow_new, column=Symbol("Snow_New (cm)"), display_key=:metric_snow_new, aliases=("new snow", "neuschnee"), color=:lightskyblue, window=5, recent_days=120, plot=:bar),
+    (key=:temperature, column=Symbol("Temperature (°C)"), display_key=:metric_temperature, aliases=("temperature", "temperatur"), color=:tomato, window=7, recent_days=180, plot=:line),
+    (key=:precipitation, column=Symbol("Precipitation (mm)"), display_key=:metric_precipitation, aliases=("precipitation", "niederschlag"), color=:seagreen, window=7, recent_days=180, plot=:line),
+    (key=:wind, column=Symbol("Wind (Beaufort)"), display_key=:metric_wind, aliases=("wind", "windstärke"), color=:goldenrod, window=7, recent_days=180, plot=:line)
 )
 
 """
@@ -73,16 +74,16 @@ end
 function prompt_session_finish(config::CLIConfig)
     config.command == :menu && return
     stdin_is_tty() || return
-    println("\nTool beenden? (q = Quit, Enter = zurück)")
-    print("> ")
+    println()
+    println(t(:prompt_session_finish))
     response = try
-        lowercase(strip(readline()))
+        lowercase(readline_with_speech("> "))
     catch err
         isa(err, InterruptException) && rethrow()
         ""
     end
     if response in ("q", "quit", "y", "yes", "j", "ja")
-        println("Auf Wiedersehen!")
+        println(t(:farewell))
     end
 end
 
@@ -93,7 +94,8 @@ Run a series of lightweight quality checks on the filtered dataset, printing war
 for missing days or implausible metric values.
 """
 function qc_checks(df::DataFrame)
-    println("\n== QC Checks ==")
+    println()
+    println(t(:qc_header))
     issues = false
 
     if all(x -> hasproperty(df, x), [:Region, :Date])
@@ -105,7 +107,9 @@ function qc_checks(df::DataFrame)
             missing = [d for d in expected if !(d in have)]
             if !isempty(missing)
                 issues = true
-                println(@sprintf("[MISSING] Region=%s: %d missing days (%s%s)", string(grp[1][2]), length(missing), join(string.(missing[1:min(end,10)]), ", "), length(missing)>10 ? ", …" : ""))
+                sample = join(string.(missing[1:min(end,10)]), ", ")
+                extra = length(missing) > 10 ? ", …" : ""
+                println(t(:qc_missing_days; region=string(grp[1][2]), count=length(missing), sample=sample, extra=extra))
             end
         end
     end
@@ -115,7 +119,7 @@ function qc_checks(df::DataFrame)
         n = count(>(12), w)
         if n > 0
             issues = true
-            println(@sprintf("[OUTLIER] %d wind values > 12 Beaufort", n))
+            println(t(:qc_outlier_wind; count=n))
         end
     end
     if hasproperty(df, Symbol("Precipitation (mm)"))
@@ -123,7 +127,7 @@ function qc_checks(df::DataFrame)
         n = count(<(0), p)
         if n > 0
             issues = true
-            println(@sprintf("[OUTLIER] %d negative precipitation values", n))
+            println(t(:qc_outlier_precipitation; count=n))
         end
     end
     if hasproperty(df, Symbol("Snow Depth (cm)"))
@@ -131,20 +135,20 @@ function qc_checks(df::DataFrame)
         n = count(<(0), s)
         if n > 0
             issues = true
-            println(@sprintf("[OUTLIER] %d negative snow depth values", n))
+            println(t(:qc_outlier_snow_depth; count=n))
         end
     end
     if hasproperty(df, Symbol("Temperature (°C)"))
-        t = df[!, Symbol("Temperature (°C)")]
-        nbad = count(x -> x < -60 || x > 50, t)
+        tvals = df[!, Symbol("Temperature (°C)")]
+        nbad = count(x -> x < -60 || x > 50, tvals)
         if nbad > 0
             issues = true
-            println(@sprintf("[OUTLIER] %d temperature values outside [-60,50]°C", nbad))
+            println(t(:qc_outlier_temperature; count=nbad))
         end
     end
 
     if !issues
-        println("No anomalies detected.")
+        println(t(:qc_no_issues))
     end
 end
 
@@ -205,10 +209,12 @@ helpful for quick sanity checks.
 """
 function print_data_preview(df::DataFrame; limit::Int=5)
     rows = min(limit, nrow(df))
-    println("\n== Data Preview — first $(rows) rows ==")
+    println()
+    println(t(:data_preview_first; rows=rows))
     styled_table(first(df, rows))
     if nrow(df) > rows
-        println("\n== Data Preview — last $(rows) rows ==")
+        println()
+        println(t(:data_preview_last; rows=rows))
         styled_table(last(df, rows))
     end
 end
@@ -243,9 +249,10 @@ extremes where data is available, and friendly info messages otherwise.
 function print_current_month_overview(df::DataFrame)
     label_date, subset = current_month_subset(df)
     label = isempty(subset) ? "n/a" : string(Dates.monthname(month(label_date)), " ", year(label_date))
-    println("\n== Current Month Overview — $(label) ==")
+    println()
+    println(t(:current_month_header; label=label))
     if isempty(subset)
-        println("[INFO] No data for the current or latest month.")
+        println(t(:info_no_current_month_data))
         return
     end
     metrics = [
@@ -264,7 +271,7 @@ function print_current_month_overview(df::DataFrame)
         end
     end
     if isempty(rows)
-        println("[INFO] No numeric metrics available to summarise.")
+        println(t(:info_no_metrics_to_summarise))
         return
     end
     styled_table(DataFrame(rows))
@@ -305,7 +312,8 @@ function metric_group_summary(df::DataFrame; groupcol::Symbol, ycol::Symbol)
     for col in (:Average, :Median, :Min, :Max)
         grouped[!, col] = map(x -> x isa Missing ? missing : round(x; digits=2), grouped[!, col])
     end
-    println("\n== $(String(ycol)) — by $(String(groupcol)) ==")
+    println()
+    println(t(:metric_group_summary_header; metric=String(ycol), group=String(groupcol)))
     styled_table(grouped)
 end
 
@@ -342,23 +350,26 @@ with data, returning the table as a DataFrame for further processing.
 function print_daily_scoreboard(df::DataFrame; top_n::Int=5)
     snow_col = Symbol("Snow_New (cm)")
     if !hasproperty(df, :Date) || !hasproperty(df, snow_col)
-        println("\n[INFO] Unable to build the daily snowfall leaderboard (missing required columns).")
+        println()
+        println(t(:info_daily_board_missing_columns))
         return DataFrame()
     end
     if isempty(df)
-        println("\n[INFO] No rows available for the daily snowfall leaderboard.")
+        println()
+        println(t(:info_daily_board_no_rows))
         return DataFrame()
     end
     today = Dates.today()
     day_df = filter(:Date => d -> d == today, df)
-    label = "today ($(string(today)))"
+    label = t(:daily_leaderboard_today_label; date=string(today))
     if isempty(day_df)
         latest_date = maximum(df.Date)
         day_df = filter(:Date => d -> d == latest_date, df)
-        label = "latest available date ($(string(latest_date)))"
+        label = t(:daily_leaderboard_latest_label; date=string(latest_date))
     end
     if isempty(day_df)
-        println("\n[INFO] No data rows match the latest available date for the daily snowfall leaderboard.")
+        println()
+        println(t(:info_daily_board_latest_no_rows))
         return DataFrame()
     end
     day_df = copy(day_df)
@@ -385,7 +396,8 @@ function print_daily_scoreboard(df::DataFrame; top_n::Int=5)
         :Temperature => Symbol("Temperature (°C)")
     ))
 
-    println("\n== Daily Snowfall Leaderboard — $(label) ==")
+    println()
+    println(t(:daily_leaderboard_header; label=label))
     styled_table(scoreboard)
     return scoreboard
 end
@@ -399,7 +411,10 @@ When `display` is `false`, the table is returned silently for reuse in other vie
 """
 function print_monthly_overview_for_all_regions(df::DataFrame; weights::Dict{Symbol,Float64}=DEFAULT_METRIC_WEIGHTS, display::Bool=true)
     if !hasproperty(df, :Date)
-        display && println("\n[INFO] No Date column available - cannot build the monthly overview.")
+        if display
+            println()
+            println(t(:info_monthly_no_date))
+        end
         return (table=DataFrame(), label="")
     end
     metrics_map = [
@@ -411,20 +426,29 @@ function print_monthly_overview_for_all_regions(df::DataFrame; weights::Dict{Sym
     ]
     available_metrics = [col for (col, _) in metrics_map if hasproperty(df, col)]
     if isempty(available_metrics)
-        display && println("\n[INFO] No numeric metrics available to build the monthly overview.")
+        if display
+            println()
+            println(t(:info_monthly_no_metrics))
+        end
         return (table=DataFrame(), label="")
     end
 
     month_df = transform(copy(df), :Date => ByRow(d -> Date(year(d), month(d), 1)) => :Month)
     unique_months = unique(month_df.Month)
     if isempty(unique_months)
-        display && println("\n[INFO] Monthly overview not available (no month values detected).")
+        if display
+            println()
+            println(t(:info_monthly_no_month_values))
+        end
         return (table=DataFrame(), label="")
     end
     focus_month = maximum(unique_months)
     month_subset = filter(:Month => m -> m == focus_month, month_df)
     if isempty(month_subset)
-        display && println("\n[INFO] No rows for the monthly overview.")
+        if display
+            println()
+            println(t(:info_monthly_no_rows))
+        end
         return (table=DataFrame(), label="")
     end
 
@@ -445,7 +469,10 @@ function print_monthly_overview_for_all_regions(df::DataFrame; weights::Dict{Sym
         rename!(aggregated, Pair.(current, Symbol.(string.(current))))
     end
     if isempty(aggregated)
-        display && println("\n[INFO] Monthly overview could not be generated (empty grouping result).")
+        if display
+            println()
+            println(t(:info_monthly_empty_grouping))
+        end
         return (table=DataFrame(), label="")
     end
 
@@ -473,7 +500,8 @@ function print_monthly_overview_for_all_regions(df::DataFrame; weights::Dict{Sym
 
     month_label = Dates.format(focus_month, "yyyy-mm")
     if display
-        println("\n== Monthly Overview - Regional Averages for $(month_label) ==")
+        println()
+        println(t(:monthly_overview_header; month=month_label))
         styled_table(aggregated)
     end
     return (table=aggregated, label=month_label)
@@ -487,7 +515,8 @@ regions according to the weighted score.
 """
 function print_weighted_ranking(monthly_table::DataFrame, month_label::AbstractString; top_n::Int=10)
     if isempty(monthly_table)
-        println("\n[INFO] Kein Ranking verfügbar. Prüfe deine Filter oder Datenlage.")
+        println()
+        println(t(:info_ranking_unavailable))
         return DataFrame()
     end
     local_table = copy(monthly_table)
@@ -496,14 +525,16 @@ function print_weighted_ranking(monthly_table::DataFrame, month_label::AbstractS
     end
 
     if !(:WeightedScore in names(local_table)) && !("WeightedScore" in names(local_table))
-        println("\n[INFO] Gewichteter Score nicht verfügbar – Ranking wird übersprungen.")
+        println()
+        println(t(:info_ranking_missing_score))
         return DataFrame()
     end
 
     score_col = :WeightedScore in names(local_table) ? :WeightedScore : "WeightedScore"
     valid_rows = filter(score_col => x -> x !== missing, local_table)
     if isempty(valid_rows)
-        println("\n[INFO] Keine gültigen Score-Werte vorhanden – Ranking wird übersprungen.")
+        println()
+        println(t(:info_ranking_no_valid_scores))
         return DataFrame()
     end
 
@@ -519,7 +550,8 @@ function print_weighted_ranking(monthly_table::DataFrame, month_label::AbstractS
     )
 
     label = isempty(month_label) ? "" : " (" * month_label * ")"
-    println("\n== Top Ski-Regionen nach Gewichtung$(label) ==")
+    println()
+    println(t(:ranking_header; label=label))
     styled_table(rank_df)
     return rank_df
 end
@@ -531,32 +563,33 @@ Print the currently active season/date/region/country filters along with dataset
 counts so users understand the scope of subsequent tables.
 """
 function print_active_filters(config::CLIConfig, df::DataFrame)
-    println("\n== Active Filters ==")
+    println()
+    println(t(:filters_header))
     rargs = config.runargs
     from_label = isnothing(rargs.fromdate) ? "open" : string(rargs.fromdate)
     to_label = isnothing(rargs.todate) ? "open" : string(rargs.todate)
     season_label = isempty(rargs.season) ? "ALL" : rargs.season
-    println(" - Season: $(season_label)")
-    println(" - Date range: $(from_label) -> $(to_label)")
+    println(t(:filters_season; value=season_label))
+    println(t(:filters_date_range; from=from_label, to=to_label))
     if config.region_focus !== nothing
-        println(" - Preselected region: $(config.region_focus)")
+        println(t(:filters_region_selected; value=config.region_focus))
     elseif haskey(ENV, "REGION")
         env_region = ENV["REGION"]
-        println(" - Preselected region (ENV): $(env_region)")
+        println(t(:filters_region_env; value=env_region))
     else
-        println(" - No region preselected")
+        println(t(:filters_region_none))
     end
     if config.menu_country !== nothing
-        println(" - Country filter (menu): $(config.menu_country)")
+        println(t(:filters_country_menu; value=config.menu_country))
     elseif haskey(ENV, "COUNTRY")
-        println(" - Country filter (ENV): " * ENV["COUNTRY"])
+        println(t(:filters_country_env; value=ENV["COUNTRY"]))
     else
-        println(" - No country preselected")
+        println(t(:filters_country_none))
     end
     if !isempty(df) && hasproperty(df, :Date)
-        println(" - Observations after filters: $(nrow(df)) rows, window $(string(minimum(df.Date))) - $(string(maximum(df.Date)))")
+        println(t(:filters_observation_window; rows=nrow(df), start=string(minimum(df.Date)), stop=string(maximum(df.Date))))
     else
-        println(" - No data available after applying filters")
+        println(t(:filters_no_data))
     end
 end
 
@@ -567,15 +600,17 @@ Print the currently normalised weights as percentages and show the sum of absolu
 weights for reference.
 """
 function print_active_weights(weights::Dict{Symbol,Float64})
-    println("\n== Aktive Gewichte ==")
+    println()
+    println(t(:weights_active_header))
     for (key, cfg) in METRIC_WEIGHT_CONFIG
         value = get(weights, key, 0.0)
-        label = get(cfg, :label, string(key))
-        preference = get(cfg, :preference, :higher) == :lower ? " (weniger ist besser)" : ""
-        println(" - $(label): $(round(value; digits=2))%" * preference)
+        label_key = get(cfg, :label_key, nothing)
+        label = label_key === nothing ? string(key) : t(label_key)
+        preference_suffix = get(cfg, :preference, :higher) == :lower ? t(:weights_preference_lower_suffix) : ""
+        println(t(:weights_active_line; label=label, value=round(value; digits=2), preference=preference_suffix))
     end
     total = round(sum(values(weights)); digits=2)
-    println("   Summe = $(total)%")
+    println(t(:weights_active_sum; total=total))
 end
 
 """
@@ -593,7 +628,8 @@ function prompt_region_choice(df::DataFrame, scoreboard::DataFrame, config::CLIC
     regions = available_regions(df)
     isempty(regions) && return nothing
 
-    println("\nEnter region for a focused review (press Enter to skip):")
+    println()
+    println(t(:region_prompt_header))
     suggestions = String[]
     if !isempty(scoreboard) && :Region in names(scoreboard)
         suggestions = [string(r) for r in scoreboard.Region if strip(string(r)) != ""]
@@ -601,25 +637,24 @@ function prompt_region_choice(df::DataFrame, scoreboard::DataFrame, config::CLIC
     if isempty(suggestions)
         suggestions = regions[1:min(length(regions), 10)]
     end
-    println("Suggestions: " * join(suggestions, ", "))
-    print("> ")
+    println(t(:region_prompt_suggestions; suggestions=join(suggestions, ", ")))
     try
-        input = strip(readline())
+        input = readline_with_speech("> ")
         input == "" && return nothing
         actual, alternatives = resolve_region_name(df, input)
         if actual === nothing
             limit = min(length(alternatives), 5)
             if limit > 0
-                println("Region not found. Suggestions: " * join(alternatives[1:limit], ", "))
+                println(t(:region_not_found_with_suggestions; suggestions=join(alternatives[1:limit], ", ")))
             else
-                println("Region not found. Use `list` to see all locations.")
+                println(t(:region_not_found_no_suggestions))
             end
             return nothing
         end
         return actual
     catch err
         isa(err, InterruptException) && rethrow()
-        println("Input could not be processed (" * string(err) * ").")
+        println(t(:region_input_error; error=string(err)))
         return nothing
     end
 end
@@ -631,13 +666,14 @@ Derive narrative tips from the current leaderboard and weighted monthly overview
 pointing users toward notable regions (powder, calm wind, precipitation extremes).
 """
 function print_decision_hints(scoreboard::DataFrame, monthly_table::DataFrame, weights::Dict{Symbol,Float64})
-    println("\n== Decision Support ==")
+    println()
+    println(t(:decision_support_header))
     hints = String[]
     if !isempty(scoreboard) && all(col -> col in names(scoreboard), [Symbol("Region"), Symbol("Snow_New (cm)")])
         top_row = scoreboard[1, :]
         snow_val = top_row[Symbol("Snow_New (cm)")]
         snow_label = (snow_val === missing || snow_val === nothing) ? "" : string(round(Float64(snow_val); digits=1)) * " cm"
-        push!(hints, "Fresh powder in $(top_row.Region) $(snow_label)")
+        push!(hints, t(:decision_hint_fresh_powder; region=top_row.Region, amount=snow_label))
     end
 
     if :WeightedScore in names(monthly_table)
@@ -654,11 +690,11 @@ function print_decision_hints(scoreboard::DataFrame, monthly_table::DataFrame, w
         end
         if best_idx !== nothing
             region_name = monthly_table[best_idx, :Region]
-            region_name !== missing && push!(hints, @sprintf("Beste Gesamtwertung: %s (Score %.2f)", string(region_name), best_score))
+            region_name !== missing && push!(hints, t(:decision_hint_best_overall; region=string(region_name), score=round(best_score; digits=2)))
         end
     end
 
-    function best_hint(df::DataFrame, col::Symbol; rev::Bool=false, label::String="", unit::String="")
+    function best_hint(df::DataFrame, col::Symbol; rev::Bool=false, label_key::Union{Symbol,String}=:decision_hint_metric_label, unit::String="")
         col ∈ names(df) || return nothing
         vals = collect(skipmissing(df[!, col]))
         isempty(vals) && return nothing
@@ -669,23 +705,24 @@ function print_decision_hints(scoreboard::DataFrame, monthly_table::DataFrame, w
         if region === missing || strip(string(region)) == ""
             return nothing
         end
-        return "$(label): $(region) (avg $(round(target; digits=2))$(unit))"
+        label_text = label_key isa Symbol ? t(label_key) : String(label_key)
+        return t(:decision_hint_metric; label=label_text, region=string(region), value=round(target; digits=2), unit=unit)
     end
 
-    cold_hint = best_hint(monthly_table, Symbol("Avg Temperature (°C)"); label="Coldest regions", unit="°C")
+    cold_hint = best_hint(monthly_table, Symbol("Avg Temperature (°C)"); label_key=:decision_hint_coldest, unit="°C")
     cold_hint !== nothing && push!(hints, cold_hint)
 
-    calm_hint = best_hint(monthly_table, Symbol("Avg Wind (Beaufort)"); label="Calmest wind spots", unit=" Bft")
+    calm_hint = best_hint(monthly_table, Symbol("Avg Wind (Beaufort)"); label_key=:decision_hint_calmest, unit=" Bft")
     calm_hint !== nothing && push!(hints, calm_hint)
 
-    wettest_hint = best_hint(monthly_table, Symbol("Avg Precipitation (mm)"); rev=true, label="Highest precipitation", unit=" mm")
+    wettest_hint = best_hint(monthly_table, Symbol("Avg Precipitation (mm)"); rev=true, label_key=:decision_hint_wettest, unit=" mm")
     wettest_hint !== nothing && push!(hints, wettest_hint)
 
     if isempty(hints)
-        println("No quick suggestions available - please adjust filters.")
+        println(t(:decision_no_hints))
     else
         for h in hints
-            println(" - " * h)
+            println(t(:decision_hint_line; hint=h))
         end
     end
 end
@@ -701,12 +738,14 @@ function print_region_history(df::DataFrame, region_name::Union{Nothing,Abstract
         return DataFrame()
     end
     if !hasproperty(df, :Date) || isempty(df)
-        println("\n[INFO] No data available for region $(region_name). Adjust filters or check the region name.")
+        println()
+        println(t(:info_region_no_data; region=region_name))
         return DataFrame()
     end
     region_df = hasproperty(df, :Region) ? filter(:Region => x -> !ismissing(x) && slower(x) == slower(region_name), df) : df
     if isempty(region_df)
-        println("\n[INFO] No data available for region $(region_name). Adjust filters or check the region name.")
+        println()
+        println(t(:info_region_no_data; region=region_name))
         return
     end
     latest = maximum(region_df.Date)
@@ -727,7 +766,8 @@ function print_region_history(df::DataFrame, region_name::Union{Nothing,Abstract
     )
 
     if isempty(grouped)
-        println("\n[INFO] No monthly aggregates available for region $(region_name).")
+        println()
+        println(t(:info_region_no_aggregates; region=region_name))
         return DataFrame()
     end
 
@@ -749,7 +789,8 @@ function print_region_history(df::DataFrame, region_name::Union{Nothing,Abstract
         end
     end
 
-    println("\n== Region Insights — $(region_name) (last $(months) months) ==")
+    println()
+    println(t(:region_insights_header; region=region_name, months=months))
     styled_table(display_df)
 
     return grouped
@@ -919,8 +960,10 @@ function save_region_metric_trend(region_df::DataFrame, region_name::AbstractStr
         return nothing
     end
 
-    ylabel = option.display
-    plot_title = "$(region_name) — $(option.display)"
+    label_text = get(option, :display_key, nothing)
+    metric_label = label_text === nothing ? string(option.column) : t(label_text)
+    ylabel = metric_label
+    plot_title = t(:metric_plot_title; region=region_name, metric=metric_label)
     seriestype = get(option, :plot, :line)
     color = get(option, :color, :steelblue)
 
@@ -930,7 +973,7 @@ function save_region_metric_trend(region_df::DataFrame, region_name::AbstractStr
             color=color,
             alpha=0.65,
             bar_width=0.8,
-            label=option.display,
+            label=metric_label,
             xlabel="Datum",
             ylabel=ylabel,
             legend=:topright,
@@ -943,7 +986,7 @@ function save_region_metric_trend(region_df::DataFrame, region_name::AbstractStr
             linewidth=2,
             marker=:circle,
             markersize=3,
-            label=option.display,
+            label=metric_label,
             xlabel="Datum",
             ylabel=ylabel,
             legend=:topright,
@@ -1026,8 +1069,17 @@ function resolve_metric_tokens(tokens::AbstractVector{<:AbstractString}, options
             if opt.key in seen
                 continue
             end
-            names_to_match = (slower(opt.display), slower(string(opt.key)))
-            if low == names_to_match[1] || low == names_to_match[2] || occursin(low, names_to_match[1])
+            label_key = get(opt, :display_key, nothing)
+            base_label = label_key === nothing ? string(opt.key) : t(label_key)
+            names_to_match = Set{String}()
+            push!(names_to_match, slower(base_label))
+            push!(names_to_match, slower(string(opt.key)))
+            if haskey(opt, :aliases)
+                for alias in opt.aliases
+                    push!(names_to_match, slower(alias))
+                end
+            end
+            if any(name -> name == low || occursin(low, name), names_to_match)
                 matched = opt
                 break
             end
@@ -1047,10 +1099,12 @@ function generate_metric_plots(region_df::DataFrame, region_name::AbstractString
     for opt in selections
         try
             path = save_region_metric_trend(region_df, region_name, opt)
+            label_key = get(opt, :display_key, nothing)
+            metric_label = label_key === nothing ? string(opt.key) : t(label_key)
             if path === nothing
-                println(@sprintf("[INFO] Diagramm für %s wurde übersprungen (keine Daten).", opt.display))
+                println(t(:info_metric_plot_skipped; metric=metric_label))
             else
-                println(@sprintf("[INFO] Diagramm für %s gespeichert unter: %s", opt.display, path))
+                println(t(:info_metric_plot_saved; metric=metric_label, path=path))
             end
         catch err
             @warn "Unable to save metric plot" region=region_name metric=opt.key exception=(err, catch_backtrace())
@@ -1067,32 +1121,36 @@ function prompt_region_metric_plots(region_df::DataFrame, region_name::AbstractS
         tokens = split(env_selection, r"[ ,;]+"; keepempty=false)
         env_selected, unknown = resolve_metric_tokens(tokens, collect(options))
         if !isempty(unknown)
-            println("[WARN] REGION_METRICS unverstanden: " * join(unknown, ", "))
+            println(t(:warn_region_metrics_unknown; tokens=join(unknown, ", ")))
         end
         if !isempty(env_selected)
-            println("\n[INFO] Generiere Attribute-Plots gemäß REGION_METRICS...")
+            println()
+            println(t(:info_region_metrics_env))
             generate_metric_plots(region_df, region_name, env_selected)
         end
         if !stdin_is_tty()
-            !isempty(env_selected) || println("[INFO] Keine weiteren Attribute-Plots (REGION_METRICS nicht gesetzt oder leer).")
+            !isempty(env_selected) || println(t(:info_region_metrics_none))
             return
         end
     elseif !stdin_is_tty()
-        println("\n[INFO] Keine TTY erkannt – Diagrammauswahl wird dennoch versucht. Setze alternativ REGION_METRICS, z. B. REGION_METRICS=\"Schneehöhe,Temperatur\".")
+        println()
+        println(t(:info_region_metrics_no_tty))
     end
 
-    println("\nZusätzliche Attribute visualisieren? (Nummern oder Namen, Enter zum Überspringen)")
-    println("Verfügbare Optionen:")
+    println()
+    println(t(:prompt_metric_plots_header))
+    println(t(:prompt_metric_plots_options))
     option_list = collect(options)
     for (idx, opt) in enumerate(option_list)
-        println(" $(idx)) $(opt.display)")
+        label_key = get(opt, :display_key, nothing)
+        metric_label = label_key === nothing ? string(opt.key) : t(label_key)
+        println(t(:prompt_metric_plots_option_entry; index=idx, label=metric_label))
     end
-    println("Beispieleingabe: 1,3 oder Schneehöhe Temperatur oder 'all'")
+    println(t(:prompt_metric_plots_examples))
 
     while true
-        print("> ")
         input = try
-            strip(readline())
+            readline_with_speech("> ")
         catch err
             isa(err, InterruptException) && rethrow()
             ""
@@ -1103,25 +1161,26 @@ function prompt_region_metric_plots(region_df::DataFrame, region_name::AbstractS
         tokens = split(input, r"[ ,;]+"; keepempty=false)
         selections, unknown = resolve_metric_tokens(tokens, option_list)
         if !isempty(unknown)
-            println("Nicht erkannt: " * join(unknown, ", "))
+            println(t(:prompt_metric_plots_unknown_tokens; tokens=join(unknown, ", ")))
         end
         if isempty(selections)
-            println("Bitte gültige Nummern oder Namen eingeben (Enter für Abbruch).")
+            println(t(:prompt_metric_plots_retry))
             continue
         end
 
         generate_metric_plots(region_df, region_name, selections)
 
-        println("\nWeitere Attribute plotten? (y/N)")
-        print("> ")
+        println()
+        println(t(:prompt_metric_plots_repeat))
         again = try
-            lowercase(strip(readline()))
+            lowercase(readline_with_speech("> "))
         catch err
             isa(err, InterruptException) && rethrow()
             ""
         end
         again in ("y", "yes", "j", "ja") || return
-        println("\nNächste Auswahl (Enter zum Beenden):")
+        println()
+        println(t(:prompt_metric_plots_next))
     end
 end
 
@@ -1132,18 +1191,18 @@ Display a quick reference of available subcommands and environment/CLI options.
 """
 function print_available_commands()
     println()
-    printstyled("Available commands\n"; color=:cyan, bold=true)
-    printstyled("  menu          "; color=:green, bold=true); println("- interactive terminal menu")
-    printstyled("  report        "; color=:green, bold=true); println("- default full dashboard (this view)")
-    printstyled("  list          "; color=:green, bold=true); println("- list all DACH regions")
-    printstyled("  region NAME   "; color=:green, bold=true); println("- deep dive into a single resort (replace NAME)")
+    printstyled(t(:commands_header) * "\n"; color=:cyan, bold=true)
+    printstyled("  menu          "; color=:green, bold=true); println(t(:commands_menu))
+    printstyled("  report        "; color=:green, bold=true); println(t(:commands_report))
+    printstyled("  list          "; color=:green, bold=true); println(t(:commands_list))
+    printstyled("  region NAME   "; color=:green, bold=true); println(t(:commands_region))
     println()
-    printstyled("Options:"; color=:yellow, bold=true); println(" --from YYYY-MM-DD | --to YYYY-MM-DD | --season WINTER|SUMMER|ALL")
-    printstyled("Weights:"; color=:yellow, bold=true); println(" --weight-snow-new <v> | --weight-temperature <v> | ... (Prompt via --ask-weights)")
-    printstyled("Environment:"; color=:yellow, bold=true); println(" REGION, CSV_PATH, WEIGHT_SNOW_NEW, ...")
+    printstyled(t(:commands_options_label); color=:yellow, bold=true); println(t(:commands_options))
+    printstyled(t(:commands_weights_label); color=:yellow, bold=true); println(t(:commands_weights))
+    printstyled(t(:commands_env_label); color=:yellow, bold=true); println(t(:commands_env))
     println()
-    printstyled("Quick copy:"; color=:magenta, bold=true); println(" $(COMMAND_PREFIX) menu")
-    printstyled("Region example:"; color=:magenta, bold=true); println(" $(COMMAND_PREFIX) region \"Zermatt\"")
+    printstyled(t(:commands_quick_label); color=:magenta, bold=true); println(" $(COMMAND_PREFIX) menu")
+    printstyled(t(:commands_region_example_label); color=:magenta, bold=true); println(" $(COMMAND_PREFIX) region \"Zermatt\"")
 end
 
 """
@@ -1181,18 +1240,18 @@ conditions, historical aggregates, and plot generation for the chosen region.
 """
 function run_region(df::DataFrame, region_name::Union{Nothing,String}; weights::Dict{Symbol,Float64}=DEFAULT_METRIC_WEIGHTS, monthly_table::Union{Nothing,DataFrame}=nothing, region_index::Union{Nothing,Dict{String,DataFrame}}=nothing)
     if region_name === nothing || strip(String(region_name)) == ""
-        println("Please provide a region name, e.g. `$(COMMAND_PREFIX) region \"Zermatt\"`.")
+        println(t(:region_prompt_missing; command=COMMAND_PREFIX))
         run_list(df)
         return
     end
 
     actual, suggestions = resolve_region_name(df, String(region_name))
     if actual === nothing
-        println("Region \"$(region_name)\" not found.")
+        println(t(:region_not_found_exact; region=region_name))
         if !isempty(suggestions)
-            println("Did you mean: " * join(suggestions[1:min(5, length(suggestions))], ", ") * "?")
+            println(t(:region_did_you_mean; suggestions=join(suggestions[1:min(5, length(suggestions))], ", ")))
         end
-        println("Run `list` to show all available regions.")
+        println(t(:region_run_list_hint))
         return
     end
 
@@ -1203,7 +1262,7 @@ function run_region(df::DataFrame, region_name::Union{Nothing,String}; weights::
         subset(df, :Region => ByRow(x -> !ismissing(x) && slower(String(x)) == region_key); view=true)
     end
     if region_df === nothing || isempty(region_df)
-        println("No data available for region $(actual) after applying filters.")
+        println(t(:info_region_no_data; region=actual))
         return
     end
 
@@ -1212,8 +1271,8 @@ function run_region(df::DataFrame, region_name::Union{Nothing,String}; weights::
     country = hasproperty(region_df, :Country) ? unique([string(c) for c in region_df.Country if c !== missing]) : String[]
     country_label = isempty(country) ? "Unknown" : country[1]
 
-    println("== Region Overview — $(actual) ==")
-    println(@sprintf("Country: %s | Observations: %d | Date range: %s to %s", country_label, nrow(region_df), string(minimum(region_df.Date)), string(maximum(region_df.Date))))
+    println(t(:region_overview_header; region=actual))
+    println(t(:region_overview_stats; country=country_label, rows=nrow(region_df), start=string(minimum(region_df.Date)), stop=string(maximum(region_df.Date))))
     if monthly_table === nothing
         print_active_weights(weights)
     end
@@ -1221,13 +1280,15 @@ function run_region(df::DataFrame, region_name::Union{Nothing,String}; weights::
     print_current_month_overview(region_df)
     events = region_top_snow_events(region_df; top_n=5)
     if !isempty(events)
-        println("\n== Top fresh snow days ==")
+        println()
+        println(t(:region_top_snow_days))
         styled_table(events)
     end
 
     recent = recent_conditions(region_df; recent_days=14)
     if !isempty(recent)
-        println("\n== Recent conditions (last 14 days) ==")
+        println()
+        println(t(:region_recent_conditions))
         styled_table(recent)
     end
 
@@ -1242,9 +1303,11 @@ function run_region(df::DataFrame, region_name::Union{Nothing,String}; weights::
         @warn "Unable to save snow trend plot" region=actual exception=(err, catch_backtrace())
     end
     if plot_path !== nothing
-        println("\n[INFO] Snow trend plot saved to: $(plot_path)")
+        println()
+        println(t(:info_snow_plot_saved; path=plot_path))
     elseif plot_ok
-        println("\n[INFO] Snow trend plot skipped (missing numeric data).")
+        println()
+        println(t(:info_snow_plot_skipped))
     end
 
     current_score = nothing
@@ -1289,9 +1352,9 @@ function run_region(df::DataFrame, region_name::Union{Nothing,String}; weights::
         end
     end
     if score_plot_path !== nothing
-        println("[INFO] Score trend plot saved to: $(score_plot_path)")
+        println(t(:info_score_plot_saved; path=score_plot_path))
     elseif score_plot_ok
-        println("[INFO] Score trend plot skipped (insufficient data).")
+        println(t(:info_score_plot_skipped))
     end
 
     prompt_region_metric_plots(region_df, actual; env_selection=get(ENV, "REGION_METRICS", nothing))
@@ -1322,7 +1385,8 @@ regions from the weighted ranking. Falls back to a hint for non-interactive runs
 """
 function prompt_region_details(df::DataFrame, ranking::DataFrame; config::CLIConfig, weights::Dict{Symbol,Float64}, monthly_table::DataFrame, region_index::Union{Nothing,Dict{String,DataFrame}}=nothing)
     if isempty(ranking)
-        println("\nHinweis: Nutze `region <NAME>` für Details zu einem bestimmten Ort.")
+        println()
+        println(t(:hint_region_command))
         prompt_session_finish(config)
         return
     end
@@ -1331,17 +1395,19 @@ function prompt_region_details(df::DataFrame, ranking::DataFrame; config::CLICon
     tty = stdin_is_tty()
     if !tty
         if !isempty(regions)
-            println("\n[INFO] Keine TTY erkannt – Eingaben funktionieren eventuell eingeschränkt. `region $(regions[1])` liefert Details zur Top-Region.")
+            println()
+            println(t(:info_no_tty_region_top; region=regions[1]))
         else
-            println("\n[INFO] Keine TTY erkannt – Eingaben funktionieren eventuell eingeschränkt. Alternativ: `region <NAME>`.")
+            println()
+            println(t(:info_no_tty_region_generic))
         end
     end
 
-    println("\nRegiondetails anzeigen? (Rangnummer oder Name, Enter zum Überspringen)")
+    println()
+    println(t(:prompt_region_details))
     while true
-        print("> ")
         input = try
-            strip(readline())
+            readline_with_speech("> ")
         catch err
             isa(err, InterruptException) && rethrow()
             ""
@@ -1370,16 +1436,16 @@ function prompt_region_details(df::DataFrame, ranking::DataFrame; config::CLICon
         end
 
         if selection === nothing
-            println("Region nicht gefunden. Bitte Nummer oder exakten Namen eingeben (Enter zum Abbruch).")
+            println(t(:region_prompt_retry))
             continue
         end
 
         run_region(df, selection; weights=weights, monthly_table=monthly_table, region_index=region_index)
 
-        println("\nWeitere Region ansehen? (y/N)")
-        print("> ")
+        println()
+        println(t(:prompt_region_another))
         again = try
-            lowercase(strip(readline()))
+            lowercase(readline_with_speech("> "))
         catch err
             isa(err, InterruptException) && rethrow()
             ""
@@ -1388,6 +1454,7 @@ function prompt_region_details(df::DataFrame, ranking::DataFrame; config::CLICon
             prompt_session_finish(config)
             return
         end
-        println("\nNächste Region (Nummer oder Name, Enter zum Beenden):")
+        println()
+        println(t(:prompt_region_next))
     end
 end

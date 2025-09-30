@@ -1,14 +1,16 @@
+using .Localization: t
+
 """
 Weight configuration & prompting utilities: centralises how scoring metrics are
 described, defaulted, overridden (ENV/CLI), and normalised for interactive/report
 runs.
 """
 const METRIC_WEIGHT_CONFIG = (
-    :snow_new => (column=Symbol("Avg Snow_New (cm)"), prompt="Frischer Schnee – höhere Werte bevorzugt [0-100%]", label="Frischer Schnee", env="WEIGHT_SNOW_NEW", preference=:higher),
-    :snow_depth => (column=Symbol("Avg Snow Depth (cm)"), prompt="Schneehöhe – höhere Werte bevorzugt [0-100%]", label="Schneehöhe", env="WEIGHT_SNOW_DEPTH", preference=:higher),
-    :temperature => (column=Symbol("Avg Temperature (°C)"), prompt="Temperatur – kühler ist besser [0-100%]", label="Temperatur", env="WEIGHT_TEMPERATURE", preference=:lower),
-    :precipitation => (column=Symbol("Avg Precipitation (mm)"), prompt="Niederschlag – weniger Regen ist besser [0-100%]", label="Niederschlag", env="WEIGHT_PRECIPITATION", preference=:lower),
-    :wind => (column=Symbol("Avg Wind (Beaufort)"), prompt="Wind – ruhiger ist besser [0-100%]", label="Wind", env="WEIGHT_WIND", preference=:lower)
+    :snow_new => (column=Symbol("Avg Snow_New (cm)"), prompt_key=:weight_prompt_snow_new, label_key=:weight_label_snow_new, env="WEIGHT_SNOW_NEW", preference=:higher),
+    :snow_depth => (column=Symbol("Avg Snow Depth (cm)"), prompt_key=:weight_prompt_snow_depth, label_key=:weight_label_snow_depth, env="WEIGHT_SNOW_DEPTH", preference=:higher),
+    :temperature => (column=Symbol("Avg Temperature (°C)"), prompt_key=:weight_prompt_temperature, label_key=:weight_label_temperature, env="WEIGHT_TEMPERATURE", preference=:lower),
+    :precipitation => (column=Symbol("Avg Precipitation (mm)"), prompt_key=:weight_prompt_precipitation, label_key=:weight_label_precipitation, env="WEIGHT_PRECIPITATION", preference=:lower),
+    :wind => (column=Symbol("Avg Wind (Beaufort)"), prompt_key=:weight_prompt_wind, label_key=:weight_label_wind, env="WEIGHT_WIND", preference=:lower)
 )
 
 const DEFAULT_METRIC_WEIGHTS = Dict(
@@ -78,7 +80,7 @@ function apply_weight_env_overrides!(weights::Dict{Symbol,Float64})
             if parsed !== nothing
                 weights[key] = parsed
             else
-                @warn "Ignoring invalid weight from ENV" env_key value=ENV[env_key]
+                @warn t(:warn_invalid_weight_env; env=env_key) value=ENV[env_key]
             end
         end
     end
@@ -94,27 +96,28 @@ Interactively collect metric weights from the user. Non-interactive sessions can
 """
 function prompt_metric_weights!(weights::Dict{Symbol,Float64}; force::Bool=false)
     if !(stdin_is_tty() || force)
-        println("[INFO] Gewichtungsabfrage übersprungen (nicht-interaktive Sitzung).")
+        println(t(:info_weights_prompt_skipped))
         return weights
     end
-    println("\n== Gewichtung der Metriken ==")
-    println("Bitte für jede Metrik eine Wichtigkeit zwischen 0 und 100 eingeben (Angaben wie 30 oder 30% sind erlaubt). Die Summe muss 100 ergeben.")
-    println("Hinweis: Temperatur, Niederschlag und Wind werden als 'niedriger ist besser' interpretiert.")
+    println()
+    println(t(:weights_prompt_header))
+    println(t(:weights_prompt_instructions))
+    println(t(:weights_prompt_hint_lower_better))
     for (key, cfg) in METRIC_WEIGHT_CONFIG
         default = get(weights, key, 0.0)
+        prompt_template = get(cfg, :prompt_key, nothing)
+        prompt_text = prompt_template === nothing ? string(key) : t(prompt_template)
         while true
-            print("$(cfg.prompt) [$(round(default; digits=2))]: ")
             response = try
-                readline()
+                readline_with_speech("$(prompt_text) [$(round(default; digits=2))]: "; fallback_on_empty=false)
             catch err
                 isa(err, InterruptException) && rethrow()
                 ""
             end
-            response = strip(response)
             response == "" && break
             parsed = parse_weight_value(response)
             if parsed === nothing || parsed < 0 || parsed > 100
-                println("  -> Bitte einen Wert zwischen 0 und 100 eingeben.")
+                println(t(:error_weight_value_range))
                 continue
             end
             weights[key] = parsed
@@ -123,7 +126,8 @@ function prompt_metric_weights!(weights::Dict{Symbol,Float64}; force::Bool=false
     end
     total = sum(values(weights))
     if !(abs(total - 100.0) <= 1e-6)
-        println("\nDie Summe der Gewichte beträgt $(round(total; digits=2)). Bitte erneut eingeben.")
+        println()
+        println(t(:error_weight_sum; sum=round(total; digits=2)))
         return prompt_metric_weights!(weights; force=force)
     end
     return weights
@@ -138,7 +142,7 @@ the defaults are restored.
 function normalize_weights!(weights::Dict{Symbol,Float64})
     total = sum(values(weights))
     if total <= eps(Float64)
-        @warn "Weight sum <= 0. Reverting to defaults." current=weights
+        @warn t(:warn_weight_sum_non_positive) current=weights
         for (key, value) in DEFAULT_METRIC_WEIGHTS
             weights[key] = value
         end

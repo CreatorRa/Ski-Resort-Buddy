@@ -7,6 +7,8 @@ feature-specific submodules (utils, transforms, weights, reporting, menu, CLI).
 """
 module SkiLookup
 
+include("localization.jl")
+
 using CSV
 using DataFrames
 using Dates
@@ -14,6 +16,7 @@ using Statistics
 using Printf
 using PrettyTables
 using Plots
+using .Localization: t
 
 export main
 
@@ -22,45 +25,27 @@ const CSV_FILE_NAME = "ski-regions-data.csv"
 const CSV_PATH_DEFAULT = joinpath(ROOT_DIR, CSV_FILE_NAME)
 const COMMAND_PREFIX = "julia --project=. bin/dach_resort_advisor"
 const PLOTS_OUTPUT_DIR = joinpath(ROOT_DIR, "plots")
+const SPEECH_CMD = Ref{Union{Nothing,String}}(nothing)
 
 #---Main Logic with Saftey check---
 
 
-if isfile(CSV_PATH_DEFAULT)
-
-
-    println("File found at:", CSV_PATH_DEFAULT)
-
-
-    println("Reading data...")
-
-
-    
-
-
-    df = CSV.read(CSV_PATH_DEFAULT, DataFrame)
-
-
-    println("Display the first 10 rows:")
-
-
-    println(first(df, 10))
-
-
-else
-
-
-    println("File not found!")
-
-
-    println("Please ensure that the file 'ski-regions-data.csv' is located in the project directory.")
-
-
-
-
+if get(ENV, "SKILOOKUP_BOOT_PREVIEW", "0") == "1"
+    if isfile(CSV_PATH_DEFAULT)
+        println(t(:info_default_csv_found; path=CSV_PATH_DEFAULT))
+        println(t(:info_default_csv_reading))
+        df = CSV.read(CSV_PATH_DEFAULT, DataFrame)
+        println(t(:info_default_csv_preview))
+        println(first(df, 10))
+    else
+        println(t(:error_default_csv_missing))
+        println(t(:error_default_csv_hint; file=CSV_FILE_NAME))
+    end
+    println()
 end
 
-#---End of Main Logic with Saftey check---
+#---End of optional preview block---
+
 gr()
 Plots.default(; fmt=:png, legend=:topright, size=(900, 500))
 
@@ -104,6 +89,9 @@ struct CLIConfig
     weights::Dict{Symbol,Float64}
     force_weight_prompt::Bool
     menu_country::Union{Nothing,String}
+    speech_cmd::Union{Nothing,String}
+    language::Symbol
+    language_explicit::Bool
 end
 
 include("utils.jl")

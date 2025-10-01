@@ -1,4 +1,5 @@
 using .Localization: t
+import Base: lowercase
 
 """
 Weight configuration & prompting utilities: centralises how scoring metrics are
@@ -19,6 +20,47 @@ const DEFAULT_METRIC_WEIGHTS = Dict(
     :temperature => 20.0,
     :precipitation => 15.0,
     :wind => 10.0
+)
+
+const WEIGHT_PRESET_CONFIG = (
+    (key=:balanced,
+     name_key=:weights_preset_balanced_name,
+     description_key=:weights_preset_balanced_description,
+     aliases=("balanced", "default", "standard", "ausgewogen"),
+     weights=Dict(DEFAULT_METRIC_WEIGHTS)),
+    (key=:powder,
+     name_key=:weights_preset_powder_name,
+     description_key=:weights_preset_powder_description,
+     aliases=("powder", "pulver", "powderhunter", "powderjaeger", "powderjäger", "pulverschnee"),
+     weights=Dict(
+        :snow_new => 45.0,
+        :snow_depth => 35.0,
+        :temperature => 8.0,
+        :precipitation => 7.0,
+        :wind => 5.0
+    )),
+    (key=:family,
+     name_key=:weights_preset_family_name,
+     description_key=:weights_preset_family_description,
+     aliases=("family", "familie", "familyfriendly", "familienfreundlich"),
+     weights=Dict(
+        :snow_new => 15.0,
+        :snow_depth => 30.0,
+        :temperature => 25.0,
+        :precipitation => 15.0,
+        :wind => 15.0
+    )),
+    (key=:sunny,
+     name_key=:weights_preset_sunny_name,
+     description_key=:weights_preset_sunny_description,
+     aliases=("sunny", "sonnig", "sun", "sunnyskier", "sonnenskifahrer"),
+     weights=Dict(
+        :snow_new => 20.0,
+        :snow_depth => 20.0,
+        :temperature => 35.0,
+        :precipitation => 10.0,
+        :wind => 15.0
+    ))
 )
 
 const METRIC_WEIGHT_FLAGS = Dict(
@@ -85,6 +127,82 @@ function apply_weight_env_overrides!(weights::Dict{Symbol,Float64})
         end
     end
     return weights
+end
+
+function apply_weight_preset!(weights::Dict{Symbol,Float64}, preset)
+    for (key, _) in METRIC_WEIGHT_CONFIG
+        weights[key] = get(preset.weights, key, get(DEFAULT_METRIC_WEIGHTS, key, 0.0))
+    end
+    normalize_weights!(weights)
+    return weights
+end
+
+function prompt_weight_profile!(weights::Dict{Symbol,Float64}; force::Bool=false)
+    if !(stdin_is_tty() || force)
+        return :skip
+    end
+    println()
+    println(t(:weights_profile_header))
+    println(t(:weights_profile_hint))
+    for (idx, preset) in enumerate(WEIGHT_PRESET_CONFIG)
+        println(t(:weights_profile_option; index=idx, name=t(preset.name_key), description=t(preset.description_key)))
+    end
+    custom_index = length(WEIGHT_PRESET_CONFIG) + 1
+    println(t(:weights_profile_option_custom; index=custom_index))
+    while true
+        input = try
+            strip(readline_with_speech("> "; fallback_on_empty=true))
+        catch err
+            isa(err, InterruptException) && rethrow()
+            println(t(:weights_profile_invalid))
+            return :skip
+        end
+        if input == ""
+            return :manual
+        end
+        lowered = lowercase(input)
+        if lowered in ("custom", "manual", "manuell")
+            return :manual
+        end
+        parsed = tryparse(Int, input)
+        chosen = nothing
+        if parsed !== nothing
+            if 1 <= parsed <= length(WEIGHT_PRESET_CONFIG)
+                chosen = WEIGHT_PRESET_CONFIG[parsed]
+            elseif parsed == custom_index
+                return :manual
+            end
+        else
+            for preset in WEIGHT_PRESET_CONFIG
+                if lowered in preset.aliases
+                    chosen = preset
+                    break
+                end
+            end
+        end
+        if chosen === nothing
+            println(t(:weights_profile_invalid))
+            continue
+        end
+        apply_weight_preset!(weights, chosen)
+        println(t(:weights_profile_applied; name=t(chosen.name_key)))
+        while true
+            println(t(:weights_profile_adjust_prompt))
+            response = try
+                lowercase(strip(readline_with_speech("> "; fallback_on_empty=true)))
+            catch err
+                isa(err, InterruptException) && rethrow()
+                response = ""
+            end
+            if response in ("", "n", "no", "nein")
+                return :preset
+            elseif response in ("y", "yes", "j", "ja")
+                return :preset_manual
+            else
+                println(t(:weights_profile_invalid))
+            end
+        end
+    end
 end
 
 """
@@ -163,7 +281,11 @@ sessions). Returns the mutated dictionary for convenience.
 """
 function prepare_weights!(weights::Dict{Symbol,Float64}; force::Bool, prompt::Bool)
     if prompt
-        prompt_metric_weights!(weights; force=force)
+        selection = prompt_weight_profile!(weights; force=force)
+        if selection == :manual || selection == :preset_manual
+            prompt_metric_weights!(weights; force=force)
+        end
+        normalize_weights!(weights)
     else
         normalize_weights!(weights)
     end

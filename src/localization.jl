@@ -53,6 +53,21 @@ info_weights_prompt_skipped	[INFO] Weight prompt skipped (non-interactive sessio
 weights_prompt_header	== Metric Weighting ==	== Gewichtung der Metriken ==
 weights_prompt_instructions	Enter a priority between 0 and 100 for each metric (values like 30 or 30% are fine). The sum must equal 100.	Für jede Metrik eine Wichtigkeit zwischen 0 und 100 eingeben (Angaben wie 30 oder 30% sind erlaubt). Die Summe muss 100 ergeben.
 weights_prompt_hint_lower_better	Hint: Temperature, precipitation, and wind are treated as 'lower is better'.	Hinweis: Temperatur, Niederschlag und Wind werden als 'niedriger ist besser' interpretiert.
+weights_profile_header	Choose a weight profile (press Enter for manual setup):	Wähle ein Gewichtungsprofil (Enter für manuelle Eingabe):
+weights_profile_hint	Presets focus on common ski scenarios. Select a number to apply one instantly.	Presets decken typische Ski-Szenarien ab. Gib eine Zahl ein, um ein Profil sofort zu übernehmen.
+weights_profile_option	 {{index}}) {{name}} - {{description}}	 {{index}}) {{name}} - {{description}}
+weights_profile_option_custom	 {{index}}) Custom profile (set weights manually)	 {{index}}) Eigenes Profil (Gewichte manuell festlegen)
+weights_profile_invalid	Not recognized. Please choose one of the listed options.	Nicht erkannt. Bitte eine der aufgeführten Optionen wählen.
+weights_profile_applied	Applied preset: {{name}}.	Preset übernommen: {{name}}.
+weights_profile_adjust_prompt	Fine-tune the weights? (y/N)	Gewichte weiter anpassen? (y/N)
+weights_preset_balanced_name	Balanced Allrounder	Ausgewogener Allrounder
+weights_preset_balanced_description	Balanced mix for versatile resort conditions.	Ausgewogene Mischung für vielseitige Bedingungen.
+weights_preset_powder_name	Powder Hunter	Powderjäger
+weights_preset_powder_description	Maximises fresh snow and deep base coverage.	Maximiert Neuschnee und eine tiefe Schneedecke.
+weights_preset_family_name	Family Friendly	Familienfreundlich
+weights_preset_family_description	Prefers milder temperatures, calm wind and reliable snow depth.	Bevorzugt mildere Temperaturen, wenig Wind und verlässliche Schneehöhe.
+weights_preset_sunny_name	Sunny Cruiser	Sonniger Cruiser
+weights_preset_sunny_description	Focuses on sunshine and calm conditions with sufficient snow.	Konzentriert sich auf Sonne und ruhige Bedingungen bei ausreichender Schneelage.
 error_weight_value_range	  -> Please enter a value between 0 and 100.	  -> Bitte einen Wert zwischen 0 und 100 eingeben.
 error_weight_sum	The sum of the weights is {{sum}}. Please enter the values again.	Die Summe der Gewichte beträgt {{sum}}. Bitte erneut eingeben.
 warn_weight_sum_non_positive	Weight sum <= 0. Reverting to defaults.	Gewichtssumme <= 0. Setze Standardwerte zurück.

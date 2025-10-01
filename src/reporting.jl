@@ -1185,27 +1185,6 @@ function prompt_region_metric_plots(region_df::DataFrame, region_name::AbstractS
 end
 
 """
-    print_available_commands()
-
-Display a quick reference of available subcommands and environment/CLI options.
-"""
-function print_available_commands()
-    println()
-    printstyled(t(:commands_header) * "\n"; color=:cyan, bold=true)
-    printstyled("  menu          "; color=:green, bold=true); println(t(:commands_menu))
-    printstyled("  report        "; color=:green, bold=true); println(t(:commands_report))
-    printstyled("  list          "; color=:green, bold=true); println(t(:commands_list))
-    printstyled("  region NAME   "; color=:green, bold=true); println(t(:commands_region))
-    println()
-    printstyled(t(:commands_options_label); color=:yellow, bold=true); println(t(:commands_options))
-    printstyled(t(:commands_weights_label); color=:yellow, bold=true); println(t(:commands_weights))
-    printstyled(t(:commands_env_label); color=:yellow, bold=true); println(t(:commands_env))
-    println()
-    printstyled(t(:commands_quick_label); color=:magenta, bold=true); println(" $(COMMAND_PREFIX) menu")
-    printstyled(t(:commands_region_example_label); color=:magenta, bold=true); println(" $(COMMAND_PREFIX) region \"Zermatt\"")
-end
-
-"""
     run_list(df)
 
 Print the alphabetised list of regions present in the dataset.
@@ -1440,7 +1419,7 @@ function prompt_region_details(df::DataFrame, ranking::DataFrame; config::CLICon
             continue
         end
 
-        run_region(df, selection; weights=weights, monthly_table=monthly_table, region_index=region_index)
+        run_region(df, String(selection); weights=weights, monthly_table=monthly_table, region_index=region_index)
 
         println()
         println(t(:prompt_region_another))

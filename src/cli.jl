@@ -169,7 +169,6 @@ function main()
 
     if isempty(df)
         println(t(:info_no_data_after_filters))
-        print_available_commands()
         return
     end
 
@@ -190,7 +189,6 @@ function main()
 
     println()
     println(t(:info_terminal_finished))
-    print_available_commands()
 end
 function language_display_name(lang::Symbol)
     key = Symbol("language_name_" * String(lang))

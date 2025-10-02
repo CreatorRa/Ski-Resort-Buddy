@@ -5,6 +5,195 @@ CLI coordination: parses arguments/environment, loads data via transforms, and
 dispatches to list/report/region/menu flows exposed by the reporting and menu layers.
 """
 
+mutable struct CLIParseState
+    command::Symbol
+    csv_path::Union{Nothing,String}
+    from_str::Union{Nothing,String}
+    to_str::Union{Nothing,String}
+    season::String
+    region_focus::Union{Nothing,String}
+    weights::Dict{Symbol,Float64}
+    force_prompt::Bool
+    speech_cmd::Union{Nothing,String}
+    language::Symbol
+    language_explicit::Bool
+end
+
+function build_initial_state()
+    weights = clone_metric_weights()
+    apply_weight_env_overrides!(weights)
+
+    state = CLIParseState(
+        :menu,
+        get(ENV, "CSV_PATH", nothing),
+        get(ENV, "FROM_DATE", nothing),
+        get(ENV, "TO_DATE", nothing),
+        uppercase(get(ENV, "SEASON", "ALL")),
+        get(ENV, "REGION", nothing),
+        weights,
+        true,
+        get(ENV, "SPEECH_CMD", get(ENV, "SPEECH_TO_TEXT_CMD", nothing)),
+        set_language!(:en),
+        false,
+    )
+
+    apply_env_language!(state)
+    apply_force_prompt_env!(state)
+    return state
+end
+
+function apply_env_language!(state::CLIParseState)
+    for (key, explicit_flag) in (("SKI_LOOKUP_LANG", true), ("APP_LANGUAGE", true), ("LANGUAGE", false), ("LANG", false))
+        haskey(ENV, key) || continue
+        candidate = strip(String(ENV[key]))
+        candidate == "" && continue
+        applied = register_language_choice!(state, candidate; mark_explicit=explicit_flag)
+        if applied && explicit_flag
+            break
+        end
+    end
+end
+
+function apply_force_prompt_env!(state::CLIParseState)
+    haskey(ENV, "FORCE_WEIGHT_PROMPT") || return
+    parsed = parse_bool(ENV["FORCE_WEIGHT_PROMPT"])
+    if parsed === nothing
+        @warn t(:warn_invalid_force_weight_prompt_env) value=ENV["FORCE_WEIGHT_PROMPT"]
+        return
+    end
+    state.force_prompt = parsed
+end
+
+function register_language_choice!(state::CLIParseState, token; mark_explicit::Bool=false)
+    language, applied = apply_language_choice(token, state.language)
+    state.language = language
+    if applied && mark_explicit
+        state.language_explicit = true
+    end
+    return applied
+end
+
+function process_cli_arguments!(state::CLIParseState)
+    i = 1
+    while i <= length(ARGS)
+        consumed = handle_cli_argument!(state, ARGS[i], i)
+        i += 1 + consumed
+    end
+end
+
+function handle_cli_argument!(state::CLIParseState, arg::String, index::Int)
+    next_arg = index < length(ARGS) ? ARGS[index + 1] : nothing
+    consumed = 0
+
+    if arg == "report"
+        state.command = :report
+    elseif arg == "menu"
+        state.command = :menu
+    elseif arg == "list"
+        state.command = :list
+    elseif arg == "region" && next_arg !== nothing
+        state.command = :region
+        state.region_focus = next_arg
+        consumed = 1
+    elseif arg == "--from" && next_arg !== nothing
+        state.from_str = next_arg
+        consumed = 1
+    elseif arg == "--to" && next_arg !== nothing
+        state.to_str = next_arg
+        consumed = 1
+    elseif arg == "--season" && next_arg !== nothing
+        state.season = uppercase(next_arg)
+        consumed = 1
+    elseif arg == "--csv" && next_arg !== nothing
+        state.csv_path = next_arg
+        consumed = 1
+    elseif arg == "--ask-weights"
+        state.force_prompt = true
+    elseif arg == "--no-ask-weights"
+        state.force_prompt = false
+    elseif arg in ("--lang", "--language") && next_arg !== nothing
+        applied = register_language_choice!(state, next_arg; mark_explicit=true)
+        state.language_explicit = state.language_explicit || applied
+        consumed = 1
+    elseif startswith(arg, "--lang=") || startswith(arg, "--language=")
+        parts = split(arg, "=", limit=2)
+        if length(parts) == 2
+            applied = register_language_choice!(state, parts[2]; mark_explicit=true)
+            state.language_explicit = state.language_explicit || applied
+        end
+    elseif arg == "--speech-cmd" && next_arg !== nothing
+        state.speech_cmd = next_arg
+        consumed = 1
+    elseif startswith(arg, "--speech-cmd=")
+        parts = split(arg, "=", limit=2)
+        length(parts) == 2 && (state.speech_cmd = parts[2])
+    elseif arg in ("--no-speech", "--speech-off")
+        state.speech_cmd = nothing
+    elseif startswith(arg, "--weight-")
+        flag = arg
+        value = nothing
+        if occursin('=', arg)
+            parts = split(arg, "=", limit=2)
+            flag = parts[1]
+            value = parts[2]
+        elseif next_arg !== nothing
+            value = next_arg
+            consumed = 1
+        end
+        apply_weight_override!(state, flag, value)
+    elseif startswith(arg, "--")
+        @warn t(:warn_unknown_option) option=arg
+    elseif state.csv_path === nothing
+        state.csv_path = arg
+    else
+        @warn t(:warn_unrecognized_argument) argument=arg
+    end
+
+    return consumed
+end
+
+function apply_weight_override!(state::CLIParseState, flag::String, value)
+    key = get(METRIC_WEIGHT_FLAGS, flag, nothing)
+    if key === nothing
+        @warn t(:warn_unknown_weight_flag) option=flag
+        return
+    end
+    if value === nothing
+        @warn t(:warn_weight_flag_requires_value; flag=flag)
+        return
+    end
+    parsed = parse_weight_value(String(value))
+    if parsed === nothing
+        @warn t(:warn_weight_parse_failed) option=flag value=value
+        return
+    end
+    state.weights[key] = parsed
+end
+
+function parse_date_value(raw::Union{Nothing,String}, warn_key::Symbol)
+    raw === nothing && return nothing
+    try
+        return Date(raw)
+    catch
+        @warn t(warn_key) value=raw
+        return nothing
+    end
+end
+
+function finalize_cli_config(state::CLIParseState)
+    from_date = parse_date_value(state.from_str, :warn_invalid_from_date)
+    to_date = parse_date_value(state.to_str, :warn_invalid_to_date)
+
+    normalize_weights!(state.weights)
+
+    speech_cmd = set_speech_cmd!(state.speech_cmd)
+    speech_cmd = maybe_prompt_speech_cmd!(speech_cmd)
+
+    runargs = RunArgs(from_date, to_date, state.season)
+    language = current_language()
+    return CLIConfig(state.command, state.csv_path, runargs, state.region_focus, state.weights, state.force_prompt, nothing, speech_cmd, language, state.language_explicit)
+end
+
 """
     parse_cli()
 
@@ -12,142 +201,9 @@ Parse CLI arguments and environment variables into a `CLIConfig`, including the 
 subcommand, data path, filters, weight overrides, and menu-specific flags.
 """
 function parse_cli()
-    from_str = get(ENV, "FROM_DATE", nothing)
-    to_str = get(ENV, "TO_DATE", nothing)
-    season = uppercase(get(ENV, "SEASON", "ALL"))
-    csv_path = get(ENV, "CSV_PATH", nothing)
-    region_focus = get(ENV, "REGION", nothing)
-    command = :menu
-    weights = clone_metric_weights()
-    apply_weight_env_overrides!(weights)
-    force_prompt = true
-    speech_cmd = get(ENV, "SPEECH_CMD", get(ENV, "SPEECH_TO_TEXT_CMD", nothing))
-
-    language = set_language!(:en)
-    language_explicit = false
-    for (key, explicit_flag) in (("SKI_LOOKUP_LANG", true), ("APP_LANGUAGE", true), ("LANGUAGE", false), ("LANG", false))
-        if haskey(ENV, key)
-            candidate = strip(String(ENV[key]))
-            if candidate != ""
-                language, applied = apply_language_choice(candidate, language)
-                if applied
-                    language_explicit = language_explicit || explicit_flag
-                    if explicit_flag
-                        break
-                    end
-                end
-            end
-        end
-    end
-
-    if haskey(ENV, "FORCE_WEIGHT_PROMPT")
-        parsed = parse_bool(ENV["FORCE_WEIGHT_PROMPT"])
-        if parsed !== nothing
-            force_prompt = parsed
-        else
-            @warn t(:warn_invalid_force_weight_prompt_env) value=ENV["FORCE_WEIGHT_PROMPT"]
-        end
-    end
-
-    i = 1
-    while i <= length(ARGS)
-        arg = ARGS[i]
-        if arg == "report"
-            command = :report
-        elseif arg == "menu"
-            command = :menu
-        elseif arg == "list"
-            command = :list
-        elseif arg == "region" && i < length(ARGS)
-            command = :region
-            region_focus = ARGS[i+1]
-            i += 1
-        elseif arg == "--from" && i < length(ARGS)
-            from_str = ARGS[i+1]; i += 1
-        elseif arg == "--to" && i < length(ARGS)
-            to_str = ARGS[i+1]; i += 1
-        elseif arg == "--season" && i < length(ARGS)
-            season = uppercase(ARGS[i+1]); i += 1
-        elseif arg == "--csv" && i < length(ARGS)
-            csv_path = ARGS[i+1]; i += 1
-        elseif arg == "--ask-weights"
-            force_prompt = true
-        elseif arg == "--no-ask-weights"
-            force_prompt = false
-        elseif arg in ("--lang", "--language") && i < length(ARGS)
-            language, applied = apply_language_choice(ARGS[i+1], language)
-            language_explicit |= applied
-            i += 1
-        elseif startswith(arg, "--lang=") || startswith(arg, "--language=")
-            parts = split(arg, "=", limit=2)
-            if length(parts) == 2
-                language, applied = apply_language_choice(parts[2], language)
-                language_explicit |= applied
-            end
-        elseif arg == "--speech-cmd" && i < length(ARGS)
-            speech_cmd = ARGS[i+1]
-            i += 1
-        elseif startswith(arg, "--speech-cmd=")
-            parts = split(arg, "=", limit=2)
-            length(parts) == 2 && (speech_cmd = parts[2])
-        elseif arg in ("--no-speech", "--speech-off")
-            speech_cmd = nothing
-        elseif startswith(arg, "--weight-")
-            flag = arg
-            value = nothing
-            if occursin('=', arg)
-                parts = split(arg, "=", limit=2)
-                flag = parts[1]
-                value = parts[2]
-            elseif i < length(ARGS)
-                value = ARGS[i+1]
-                i += 1
-            end
-            key = get(METRIC_WEIGHT_FLAGS, flag, nothing)
-            if key === nothing
-                @warn t(:warn_unknown_weight_flag) option=arg
-            elseif value === nothing
-                @warn t(:warn_weight_flag_requires_value; flag=flag)
-            else
-                parsed = parse_weight_value(value)
-                if parsed === nothing
-                    @warn t(:warn_weight_parse_failed) option=flag value=value
-                else
-                    weights[key] = parsed
-                end
-            end
-        elseif startswith(arg, "--")
-            @warn t(:warn_unknown_option) option=arg
-        elseif csv_path === nothing
-            csv_path = arg
-        else
-            @warn t(:warn_unrecognized_argument) argument=arg
-        end
-        i += 1
-    end
-
-    from_date = isnothing(from_str) ? nothing : try
-        Date(from_str)
-    catch
-        @warn t(:warn_invalid_from_date) value=from_str
-        nothing
-    end
-
-    to_date = isnothing(to_str) ? nothing : try
-        Date(to_str)
-    catch
-        @warn t(:warn_invalid_to_date) value=to_str
-        nothing
-    end
-
-    normalize_weights!(weights)
-
-    speech_cmd = set_speech_cmd!(speech_cmd)
-    speech_cmd = maybe_prompt_speech_cmd!(speech_cmd)
-
-    runargs = RunArgs(from_date, to_date, season)
-    language = current_language()
-    return CLIConfig(command, csv_path, runargs, region_focus, weights, force_prompt, nothing, speech_cmd, language, language_explicit)
+    state = build_initial_state()
+    process_cli_arguments!(state)
+    return finalize_cli_config(state)
 end
 
 """

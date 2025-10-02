@@ -278,18 +278,36 @@ function add_newsnow!(df::DataFrame)
     end
     new_col = Symbol("Snow_New (cm)")
     df[!, new_col] = fill(0.0, nrow(df))
-    groupcols = intersect([:Region, :Country], names(df))
+    hasproperty(df, :Date) || return df
+
+    groupcols = [col for col in (:Region, :Country) if col in names(df)]
+
+    local function assign_gains!(indices::Vector{Int})
+        isempty(indices) && return
+        values = df[indices, sn]
+        gains = zeros(Float64, length(indices))
+        if !isempty(values)
+            prev = values[1]
+            for j in 2:length(values)
+                current = values[j]
+                delta = current - prev
+                gains[j] = (isfinite(delta) && delta > 0) ? delta : 0.0
+                prev = current
+            end
+        end
+        df[indices, new_col] .= gains
+    end
+
     if isempty(groupcols)
-        sort!(df, :Date)
-        diffs = [NaN; diff(df[!, sn])]
-        df[!, new_col] = map(x -> isnan(x) ? 0.0 : max(x, 0.0), diffs)
+        order = sortperm(df[!, :Date])
+        assign_gains!(order)
         return df
     end
+
     for sub in groupby(df, groupcols)
         sort!(sub, :Date)
-        diffs = [NaN; diff(sub[!, sn])]
-        gains = map(x -> isnan(x) ? 0.0 : max(x, 0.0), diffs)
-        df[!, new_col][sub.row .|> Int] = gains
+        indices = collect(parentindices(sub)[1])
+        assign_gains!(indices)
     end
     return df
 end

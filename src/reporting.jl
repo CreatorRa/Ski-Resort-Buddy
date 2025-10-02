@@ -32,6 +32,14 @@ const REGION_METRIC_OPTIONS = (
     (key=:wind, column=Symbol("Wind (Beaufort)"), display_key=:metric_wind, aliases=("wind", "windstärke"), color=:goldenrod, window=7, recent_days=180, plot=:line)
 )
 
+const MONTHLY_OVERVIEW_STATUS_MESSAGES = Dict(
+    :no_date => :info_monthly_no_date,
+    :no_metrics => :info_monthly_no_metrics,
+    :no_month_values => :info_monthly_no_month_values,
+    :no_rows => :info_monthly_no_rows,
+    :empty_grouping => :info_monthly_empty_grouping
+)
+
 """
     styled_table(data; kwargs...)
 
@@ -403,20 +411,17 @@ function print_daily_scoreboard(df::DataFrame; top_n::Int=5)
 end
 
 """
-    print_monthly_overview_for_all_regions(df; weights=DEFAULT_METRIC_WEIGHTS, display=true)
+    build_monthly_overview(df; weights=DEFAULT_METRIC_WEIGHTS)
 
-Aggregate the most recent month of data per region (and optional country), compute
-summaries for the configured metrics, and add a weighted score used for ranking.
-When `display` is `false`, the table is returned silently for reuse in other views.
+Prepare the most recent monthly aggregates used across ranking and reporting flows.
+Returns a named tuple `(table, label, status)` where `status == :ok` signifies that
+`table` contains data and `label` holds the month identifier (e.g. "2024-02").
 """
-function print_monthly_overview_for_all_regions(df::DataFrame; weights::Dict{Symbol,Float64}=DEFAULT_METRIC_WEIGHTS, display::Bool=true)
+function build_monthly_overview(df::DataFrame; weights::Dict{Symbol,Float64}=DEFAULT_METRIC_WEIGHTS)
     if !hasproperty(df, :Date)
-        if display
-            println()
-            println(t(:info_monthly_no_date))
-        end
-        return (table=DataFrame(), label="")
+        return (table=DataFrame(), label="", status=:no_date)
     end
+
     metrics_map = [
         (Symbol("Temperature (°C)"), Symbol("Avg Temperature (°C)")),
         (Symbol("Precipitation (mm)"), Symbol("Avg Precipitation (mm)")),
@@ -424,32 +429,22 @@ function print_monthly_overview_for_all_regions(df::DataFrame; weights::Dict{Sym
         (Symbol("Snow Depth (cm)"), Symbol("Avg Snow Depth (cm)")),
         (Symbol("Snow_New (cm)"), Symbol("Avg Snow_New (cm)"))
     ]
+
     available_metrics = [col for (col, _) in metrics_map if hasproperty(df, col)]
     if isempty(available_metrics)
-        if display
-            println()
-            println(t(:info_monthly_no_metrics))
-        end
-        return (table=DataFrame(), label="")
+        return (table=DataFrame(), label="", status=:no_metrics)
     end
 
     month_df = transform(copy(df), :Date => ByRow(d -> Date(year(d), month(d), 1)) => :Month)
     unique_months = unique(month_df.Month)
     if isempty(unique_months)
-        if display
-            println()
-            println(t(:info_monthly_no_month_values))
-        end
-        return (table=DataFrame(), label="")
+        return (table=DataFrame(), label="", status=:no_month_values)
     end
+
     focus_month = maximum(unique_months)
     month_subset = filter(:Month => m -> m == focus_month, month_df)
     if isempty(month_subset)
-        if display
-            println()
-            println(t(:info_monthly_no_rows))
-        end
-        return (table=DataFrame(), label="")
+        return (table=DataFrame(), label="", status=:no_rows)
     end
 
     group_cols = [:Region]
@@ -469,11 +464,7 @@ function print_monthly_overview_for_all_regions(df::DataFrame; weights::Dict{Sym
         rename!(aggregated, Pair.(current, Symbol.(string.(current))))
     end
     if isempty(aggregated)
-        if display
-            println()
-            println(t(:info_monthly_empty_grouping))
-        end
-        return (table=DataFrame(), label="")
+        return (table=DataFrame(), label="", status=:empty_grouping)
     end
 
     for col in names(aggregated)
@@ -499,12 +490,29 @@ function print_monthly_overview_for_all_regions(df::DataFrame; weights::Dict{Sym
     end
 
     month_label = Dates.format(focus_month, "yyyy-mm")
+    return (table=aggregated, label=month_label, status=:ok)
+end
+
+"""
+    print_monthly_overview_for_all_regions(df; weights=DEFAULT_METRIC_WEIGHTS, display=true)
+
+Aggregate the most recent month of data per region (and optional country), compute
+summaries for the configured metrics, and add a weighted score used for ranking.
+When `display` is `false`, the table is returned silently for reuse in other views.
+"""
+function print_monthly_overview_for_all_regions(df::DataFrame; weights::Dict{Symbol,Float64}=DEFAULT_METRIC_WEIGHTS, display::Bool=true)
+    overview = build_monthly_overview(df; weights=weights)
     if display
         println()
-        println(t(:monthly_overview_header; month=month_label))
-        styled_table(aggregated)
+        if overview.status != :ok
+            msg_key = get(MONTHLY_OVERVIEW_STATUS_MESSAGES, overview.status, nothing)
+            msg_key !== nothing && println(t(msg_key))
+            return overview
+        end
+        println(t(:monthly_overview_header; month=overview.label))
+        styled_table(overview.table)
     end
-    return (table=aggregated, label=month_label)
+    return overview
 end
 
 """

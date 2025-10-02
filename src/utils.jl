@@ -284,26 +284,23 @@ end
 
 Return a sorted list of distinct region names present in the dataset.
 """
-function available_regions(df::DataFrame)
-    if !hasproperty(df, :Region)
-        return String[]
-    end
-    raw = [strip(string(r)) for r in skipmissing(df.Region) if strip(string(r)) != ""]
-    unique!(raw)
-    sort!(raw)
-    return raw
-end
+available_regions(df::DataFrame) = available_values(df, :Region)
 
 """
     available_countries(df)
 
 Return a sorted list of distinct country names extracted from the dataset.
 """
-function available_countries(df::DataFrame)
-    if !hasproperty(df, :Country)
-        return String[]
+available_countries(df::DataFrame) = available_values(df, :Country)
+
+function available_values(df::DataFrame, column::Symbol)
+    hasproperty(df, column) || return String[]
+    raw = String[]
+    for value in skipmissing(df[!, column])
+        name = strip(string(value))
+        name == "" && continue
+        push!(raw, name)
     end
-    raw = [strip(string(c)) for c in skipmissing(df.Country) if strip(string(c)) != ""]
     unique!(raw)
     sort!(raw)
     return raw

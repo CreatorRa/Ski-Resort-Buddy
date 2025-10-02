@@ -51,9 +51,6 @@ Drive the interactive main menu, letting users start the report for all countrie
 filter by a chosen country, or exit the application.
 """
 function ask_adjust_weights!(weights::Dict{Symbol,Float64})
-    if !stdin_is_tty()
-        println(t(:info_input_expected))
-    end
     println(t(:prompt_adjust_weights))
     response = try
         lowercase(readline_with_speech("> "))
@@ -93,7 +90,7 @@ function run_menu(df::DataFrame, config::CLIConfig)
             adjusted = ask_adjust_weights!(weights)
             adjusted && (base_weights = deepcopy(weights))
             report_config = report_config_for_menu(config, weights)
-            run_report(df, report_config, weights)
+            run_report(df, report_config, weights; weights_adjusted=adjusted)
             println()
             println(t(:info_return_menu))
         elseif choice in ("2", "land", "l")
@@ -111,7 +108,7 @@ function run_menu(df::DataFrame, config::CLIConfig)
             adjusted = ask_adjust_weights!(weights)
             adjusted && (base_weights = deepcopy(weights))
             local_config = report_config_for_menu(config, weights; country=country)
-            run_report(filtered, local_config, weights)
+            run_report(filtered, local_config, weights; weights_adjusted=adjusted)
             println()
             println(t(:info_return_menu))
         elseif choice in ("3", "q", "quit", "exit", "beenden")

@@ -207,12 +207,12 @@ qc_no_issues	No anomalies detected.	Keine Auffälligkeiten erkannt.
 hint_region_command	Hint: use `region <NAME>` for details about a specific resort.	Hinweis: Nutze `region <NAME>` für Details zu einem bestimmten Ort.
 info_no_tty_region_top	[INFO] No TTY detected – input may be limited. `region {{region}}` shows the top region.	[INFO] Keine TTY erkannt – Eingaben funktionieren eventuell eingeschränkt. `region {{region}}` zeigt die Top-Region.
 info_no_tty_region_generic	[INFO] No TTY detected – input may be limited. Alternatively use `region <NAME>`.	[INFO] Keine TTY erkannt – Eingaben funktionieren eventuell eingeschränkt. Alternativ: `region <NAME>`.
-prompt_region_details	Show region details? (rank number or name, Enter to skip)	Regiondetails anzeigen? (Rangnummer oder Name, Enter zum Überspringen)
+prompt_region_details	Show region details? (use ranking number or region name, Enter to skip)	Regiondetails anzeigen? (Rangnummer aus der Tabelle oder Regionsname, Enter zum Überspringen)
 region_prompt_suggestions	Suggestions: {{suggestions}}	Vorschläge: {{suggestions}}
 region_not_found_with_suggestions	Region not found. Suggestions: {{suggestions}}	Region nicht gefunden. Vorschläge: {{suggestions}}
 region_not_found_no_suggestions	Region not found. Use `list` to show all locations.	Region nicht gefunden. Nutze `list` für alle Orte.
 region_input_error	Input could not be processed ({{error}}).	Eingabe konnte nicht verarbeitet werden ({{error}}).
-region_prompt_retry	Region not found. Please enter the number or exact name (Enter to cancel).	Region nicht gefunden. Bitte Nummer oder exakten Namen eingeben (Enter zum Abbruch).
+region_prompt_retry	Region not found. Please enter the ranking number or exact name (Enter to cancel).	Region nicht gefunden. Bitte Rangnummer oder exakten Namen eingeben (Enter zum Abbruch).
 prompt_region_another	View another region? (y/N)	Weitere Region ansehen? (y/N)
 prompt_region_next	Next region (number or name, Enter to finish):	Nächste Region (Nummer oder Name, Enter zum Beenden):
 """

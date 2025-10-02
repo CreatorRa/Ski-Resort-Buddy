@@ -367,45 +367,39 @@ function print_daily_scoreboard(df::DataFrame; top_n::Int=5)
         println(t(:info_daily_board_no_rows))
         return DataFrame()
     end
-    today = Dates.today()
-    day_df = filter(:Date => d -> d == today, df)
-    label = t(:daily_leaderboard_today_label; date=string(today))
-    if isempty(day_df)
-        latest_date = maximum(df.Date)
-        day_df = filter(:Date => d -> d == latest_date, df)
-        label = t(:daily_leaderboard_latest_label; date=string(latest_date))
-    end
-    if isempty(day_df)
+
+    latest_date = maximum(df.Date)
+    window_start = latest_date - Day(364)
+    window_df = filter(:Date => d -> window_start <= d <= latest_date, df)
+    if isempty(window_df)
         println()
         println(t(:info_daily_board_latest_no_rows))
         return DataFrame()
     end
-    day_df = copy(day_df)
-    sort!(day_df, snow_col, rev=true, by=x -> x isa Missing ? -Inf : Float64(x))
-    count = min(top_n, nrow(day_df))
-    day_df = day_df[1:count, :]
+
+    group_cols = Symbol[:Region]
+    hasproperty(window_df, :Country) && push!(group_cols, :Country)
+    aggregation = combine(groupby(window_df, group_cols), snow_col => (v -> sum(skipmissing(v))) => :TotalSnow)
+    if isempty(aggregation)
+        println()
+        println(t(:info_daily_board_latest_no_rows))
+        return DataFrame()
+    end
+    sort!(aggregation, :TotalSnow, rev=true)
+    count = min(top_n, nrow(aggregation))
+    leaders = aggregation[1:count, :]
+
+    label = "" * string(window_start) * " – " * string(latest_date)
 
     scoreboard = DataFrame(
-        Rank = collect(1:count),
-        Region = hasproperty(day_df, :Region) ? map(x -> string(x), day_df.Region) : fill("n/a", count),
-        Country = hasproperty(day_df, :Country) ? map(x -> string(x), day_df.Country) : fill("n/a", count),
-        Elevation = hasproperty(day_df, Symbol("Elevation (m)")) ? day_df[!, Symbol("Elevation (m)")] : fill(missing, count),
-        SnowNew = day_df[!, snow_col],
-        Temperature = hasproperty(day_df, Symbol("Temperature (°C)")) ? day_df[!, Symbol("Temperature (°C)")] : fill(missing, count)
+        :Rank => collect(1:count),
+        :Region => (hasproperty(leaders, :Region) ? map(x -> string(x), leaders.Region) : fill("n/a", count)),
+        :Country => (hasproperty(leaders, :Country) ? map(x -> x === missing ? "n/a" : string(x), leaders.Country) : fill("n/a", count)),
+        Symbol("Total Snow (cm)") => round.(leaders.TotalSnow; digits=1)
     )
 
-    scoreboard.Elevation = map(x -> x === missing || x === nothing ? missing : round(Float64(x); digits=0), scoreboard.Elevation)
-    scoreboard.SnowNew = round.(coalesce.(scoreboard.SnowNew, 0.0); digits=1)
-    scoreboard.Temperature = map(x -> x === missing || x === nothing ? missing : round(Float64(x); digits=1), scoreboard.Temperature)
-
-    rename!(scoreboard, Dict(
-        :Elevation => Symbol("Elevation (m)"),
-        :SnowNew => Symbol("Snow_New (cm)"),
-        :Temperature => Symbol("Temperature (°C)")
-    ))
-
     println()
-    println(t(:daily_leaderboard_header; label=label))
+    println("Yearly new snow leaderboard (" * label * ")")
     styled_table(scoreboard)
     return scoreboard
 end
@@ -1354,11 +1348,13 @@ Drive the primary reporting workflow: display filters and weights, show leaderbo
 and monthly aggregates, prompt for a region deep dive, and optionally extend with
 detailed analytics.
 """
-function run_report(df::DataFrame, config::CLIConfig, weights::Dict{Symbol,Float64})
+function run_report(df::DataFrame, config::CLIConfig, weights::Dict{Symbol,Float64}; weights_adjusted::Bool=true)
     print_active_filters(config, df)
     print_active_weights(weights)
 
-    monthly = print_monthly_overview_for_all_regions(df; weights=weights, display=false)
+    !weights_adjusted && print_daily_scoreboard(df; top_n=10)
+
+    monthly = print_monthly_overview_for_all_regions(df; weights=weights, display=!weights_adjusted)
     ranked = print_weighted_ranking(monthly.table, monthly.label)
     region_index = build_region_index(df)
     prompt_region_details(df, ranked; config=config, weights=weights, monthly_table=monthly.table, region_index=region_index)

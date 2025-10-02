@@ -22,7 +22,8 @@ export main
 
 const ROOT_DIR   = abspath(joinpath(@__DIR__, ".."))
 const CSV_FILE_NAME = "ski-regions-data.csv"
-const CSV_PATH_DEFAULT = joinpath(ROOT_DIR, CSV_FILE_NAME)
+const CSV_REMOTE_URL = "https://pzghdabqnsdthysjzacl.supabase.co/storage/v1/object/public/datasets//ski-regions-dataset-2025-10-02.csv"
+const CSV_PATH_DEFAULT = CSV_REMOTE_URL
 const COMMAND_PREFIX = "julia --project=. bin/dach_resort_advisor"
 const PLOTS_OUTPUT_DIR = joinpath(ROOT_DIR, "plots")
 const SPEECH_CMD = Ref{Union{Nothing,String}}(nothing)
@@ -31,7 +32,9 @@ const SPEECH_CMD = Ref{Union{Nothing,String}}(nothing)
 
 
 if get(ENV, "SKILOOKUP_BOOT_PREVIEW", "0") == "1"
-    if isfile(CSV_PATH_DEFAULT)
+    if occursin("://", CSV_PATH_DEFAULT)
+        println("[INFO] Default CSV is remote - skipping boot preview.")
+    elseif isfile(CSV_PATH_DEFAULT)
         println(t(:info_default_csv_found; path=CSV_PATH_DEFAULT))
         println(t(:info_default_csv_reading))
         df = CSV.read(CSV_PATH_DEFAULT, DataFrame)

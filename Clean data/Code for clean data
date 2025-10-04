@@ -1,15 +1,11 @@
 #--- Swiss Data processing ---
 
-import Pkg
-Pkg.add("CSV")
-Pkg.add("DataFrames")
-
 using DataFrames
 using CSV
 
-filepath = "c:\\Users\\Carter\\OneDrive\\Documents\\KLU\\KLU Studies\\Scientific Programming\\Clean Data\\more data\\data_monthly_CH_SLF.csv"
+filepath1 = "c:\\Users\\Carter\\OneDrive\\Documents\\KLU\\KLU Studies\\Scientific Programming\\Clean Data\\more data\\data_monthly_CH_SLF.csv"
 
-df = CSV.read(filepath, DataFrame) #This writes the CSV into a dataframe
+df = CSV.read(filepath1, DataFrame) #This writes the CSV into a dataframe
 
 columns_to_drop =[
     "SCD1gt",
@@ -51,12 +47,9 @@ df.Region = replace.(df.Region, "St_Moritz" => "St Moritz")
 
 #-- Germany Data processing --
 
-using DataFrames
-using CSV
+filepath2 = "C:\\Users\\Carter\\OneDrive\\Documents\\KLU\\KLU Studies\\Scientific Programming\\Clean Data\\more data\\data_monthly_DE_DWD.csv"
 
-filepath = "C:\\Users\\Carter\\OneDrive\\Documents\\KLU\\KLU Studies\\Scientific Programming\\Clean Data\\more data\\data_monthly_DE_DWD.csv"
-
-df2 = CSV.read(filepath, DataFrame)
+df2 = CSV.read(filepath2, DataFrame)
 
 # Remove unnecessary columns
 columns_to_drop =[
@@ -103,13 +96,10 @@ df2.Region = replace.(df2.Region, "Oberndorf_Neckar" => "Oberstdorf")
 
 #-- Austria Data Processing ---
 
-using CSV
-using Dataframe
 
-filepath= "C:\\Users\\user\\Downloads\\data_monthly_AT_HZB.csv"
-df3 = CSV.read(filepath, DataFrame)
+filepath3= "C:\\Users\\Carter\\OneDrive\\Documents\\KLU\\KLU Studies\\Scientific Programming\\Clean Data\\more data\\data_monthly_AT_HZB.csv"
+df3 = CSV.read(filepath3, DataFrame)
 
-first(df3, 5) 
 
 colums_to_drop = [
     "SCD1gt",
@@ -148,23 +138,13 @@ first(df3, 10)
 
 #Combines the dataframes into a single data frame. 
 df_combined = vcat(df, df2, df3)
-println("Combined DataFrame has", nrow(df_combined),)
-
-println(first(df_combined, 10))
-println(last(df_combined, 10))
-
-#Combine the data from ski-regions with the previous dataframes. 
 
 filepath_combined = "c:\\Users\\Carter\\OneDrive\\Documents\\KLU\\KLU Studies\\Scientific Programming\\Clean Data\\more data\\combined_ski_data.csv"
-println("Loading historical snow data from '$filepath_combined'...")
 df_snow = CSV.read(filepath_combined, DataFrame)
 
 # Load the regional weather/elevation data
 filepath_regions = "c:\\Users\\Carter\\OneDrive\\Documents\\KLU\\KLU Studies\\Scientific Programming\\Clean Data\\more data\\ski-regions-data.csv"
-println("Loading regional weather data from '$filepath_regions'...")
 df_regions = CSV.read(filepath_regions, DataFrame)
-
-println("Preparing data for the join...")
 
 rename!(df_snow, "Snow Depth (cm)" => "Monthly Snow Depth (cm)")
 rename!(df_regions, "Snow Depth (cm)" => "Daily Snow Depth (cm)")
@@ -174,24 +154,8 @@ rename!(df_snow, "Date" => "Year")
 
 df_final = innerjoin(df_snow, df_regions, on = [:Region, :Country])
 
-println("Successfully joined the data.")
 println("The final DataFrame has ", nrow(df_final), " rows and ", ncol(df_final), " columns.")
-println("-"^40)
-
-println("Displaying the first 5 rows of the final joined data:")
-# Use `first` to show a preview. Note the many new columns from both files.
-println(first(df_final, 5))
-
 println("\nFinal column names in the joined DataFrame:")
-println(names(df_final))
+filter!(:Year => >=(2000),df_final)
 
-
-#-- Exporting New Combined DataFrame to CSV file--
-
-#This code simply writes the combined dataframe into a csv that is will be accessable for the project. 
-#output_filepath = "C:\\Users\\Carter\\OneDrive\\Documents\\KLU\\KLU Studies\\Scientific Programming\\Clean Data\\more data\\Dach_resort_dataset.csv"
-#CSV.write(output_filepath, Dach_resort_dataset)
-
-#-- End of Exporting New Combined DataFrame to CSV file--
-
-
+println(first(df_final, 10))

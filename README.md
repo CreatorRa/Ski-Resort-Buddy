@@ -40,3 +40,26 @@ The classic commands still exist if you prefer scripting:
 - Override the dataset with `CSV_PATH=/absolute/path.csv` if you need a custom file.
 
 Enjoy planning your next powder day! 🚡
+
+## Disclaimer and Terms of Use
+
+This project was developed for purely educational and non-commercial purposes as part of an academic assignment. The data used in this project is sourced from a publicly available dataset hosted on Zenodo, and all rights, ownership, and credit for the data belong entirely to the original authors and publishers.
+
+The information and analysis presented are provided "as is" without any warranty of accuracy, completeness, or suitability for any particular purpose. No commercial use of this data or the resulting analysis is intended or permitted. The use of this data adheres to the Creative Commons Attribution 4.0 International license under which it was published.
+Data Source and Citation
+
+The climatological and snow data used in this project was obtained from the following source:
+
+    Authors: Schmucki, E., Marty, C., Fierz, C., & Lehning, M.
+
+    Year: (2021).
+
+    Title: Long-term snow and climate measurement data from the IMIS and national observation networks.
+
+    Publisher: Zenodo.
+
+    Date Accessed: September 29, 2025.
+
+    DOI (Digital Object Identifier): https://doi.org/10.5281/zenodo.5109574
+
+Please refer to the source link for the original dataset and full metadata.

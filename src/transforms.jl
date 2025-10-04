@@ -1,3 +1,10 @@
+
+using SHA
+using Base: bytes2hex
+
+const REMOTE_CACHE_DIR = joinpath(ROOT_DIR, "data", "remote_cache")
+
+
 """
 Dataset ingestion & transformation helpers: column detection/normalisation,
 interpolation, filtering, and CSV path resolution used prior to reporting.
@@ -145,6 +152,19 @@ function normalize_path(p::String)
     return cp == "" ? nothing : cp
 end
 
+function is_remote_source(path::AbstractString)
+    trimmed = lowercase(strip(String(path)))
+    return startswith(trimmed, "http://") || startswith(trimmed, "https://")
+end
+
+function remote_cache_path(url::AbstractString)
+    sanitized = split(String(url), '?'; limit=2)[1]
+    filename = Base.basename(strip(sanitized, '/'))
+    filename = isempty(filename) ? "dataset.csv" : filename
+    digest = bytes2hex(sha1(String(url)))
+    return joinpath(REMOTE_CACHE_DIR, string(digest, "_", filename))
+end
+
 """
     resolve_csv_path(csv_path)
 
@@ -158,9 +178,11 @@ function resolve_csv_path(csv_path::Union{Nothing,String})
     candidate_list = String[]
     if requested !== nothing
         push!(candidate_list, requested)
-        push!(candidate_list, joinpath(ROOT_DIR, requested))
-        if lowercase(splitext(requested)[2]) != ".csv"
-            push!(candidate_list, joinpath(ROOT_DIR, CSV_FILE_NAME))
+        if !is_remote_source(requested)
+            push!(candidate_list, joinpath(ROOT_DIR, requested))
+            if lowercase(splitext(requested)[2]) != ".csv"
+                push!(candidate_list, joinpath(ROOT_DIR, CSV_FILE_NAME))
+            end
         end
     end
     push!(candidate_list, CSV_PATH_DEFAULT)
@@ -168,7 +190,17 @@ function resolve_csv_path(csv_path::Union{Nothing,String})
 
     seen = Set{String}()
     for cand in candidate_list
-        c = abspath(cand)
+        candidate = normalize_path(String(cand))
+        candidate === nothing && continue
+        if is_remote_source(candidate)
+            remote = candidate
+            if remote in seen
+                continue
+            end
+            push!(seen, remote)
+            return remote
+        end
+        c = abspath(candidate)
         if c in seen
             continue
         end
@@ -180,11 +212,28 @@ function resolve_csv_path(csv_path::Union{Nothing,String})
 
     fallback = search_for_csv(CSV_FILE_NAME)
     if fallback !== nothing
-        @warn "Using fallback CSV" fallback
+        @warn t(:warn_using_fallback_csv) fallback=fallback
         return fallback
     end
 
     return nothing
+end
+
+function ensure_local_csv(path::AbstractString)
+    if is_remote_source(path)
+        cache_path = remote_cache_path(String(path))
+        try
+            mkpath(dirname(cache_path))
+        catch
+            # ignore directory creation errors; download may fail later
+        end
+        if !isfile(cache_path)
+            println("[INFO] Downloading remote dataset to cache: " * cache_path)
+            Base.download(String(path), cache_path)
+        end
+        return cache_path, false
+    end
+    return path, false
 end
 
 """
@@ -195,13 +244,24 @@ dates are sorted. Raises an error when no CSV can be located.
 """
 function load_data(csv_path::Union{Nothing,String}=nothing)
     path = resolve_csv_path(csv_path)
-    path === nothing && error("CSV not found. Set CSV_PATH env variable, pass a path argument, or keep $(CSV_FILE_NAME) in the project directory.")
-    println("[INFO] Loading CSV: $(path)")
-    df = CSV.read(path, DataFrame)
+    path === nothing && error(t(:error_csv_missing; default_file=CSV_FILE_NAME))
+    println(t(:info_loading_csv; path=path))
+    local_path, cleanup = ensure_local_csv(path)
+    df = try
+        CSV.read(local_path, DataFrame)
+    finally
+        if cleanup && isfile(local_path)
+            try
+                rm(local_path; force=true)
+            catch
+                # ignore cleanup errors
+            end
+        end
+    end
     rename!(df, Dict(c => Symbol(strip(String(c))) for c in names(df)))
 
     date_col = find_date_column(df)
-    isnothing(date_col) && error("No date column detected. Expecting something like 'Date'.")
+    isnothing(date_col) && error(t(:error_no_date_column))
 
     df[!, date_col] = DateTime.(df[!, date_col]) .|> Date
     sort!(df, date_col)
@@ -275,20 +335,77 @@ function add_newsnow!(df::DataFrame)
         return df
     end
     new_col = Symbol("Snow_New (cm)")
-    df[!, new_col] = fill(0.0, nrow(df))
-    groupcols = intersect([:Region, :Country], names(df))
+    hasproperty(df, :Date) || return df
+
+    existing_new = if hasproperty(df, new_col)
+        Vector{Union{Missing,Float64}}(df[!, new_col])
+    else
+        Union{Missing,Float64}[missing for _ in 1:nrow(df)]
+    end
+    computed = zeros(Float64, nrow(df))
+
+    temp_col = hasproperty(df, Symbol("Temperature (°C)")) ? Symbol("Temperature (°C)") : nothing
+    precip_col = hasproperty(df, Symbol("Precipitation (mm)")) ? Symbol("Precipitation (mm)" ) : nothing
+    temps = temp_col === nothing ? nothing : df[!, temp_col]
+    precips = precip_col === nothing ? nothing : df[!, precip_col]
+
+    function snow_possible(idx::Int, prev_idx::Int)
+        temp_ok = true
+        if temps !== nothing
+            curr_t = temps[idx]
+            prev_t = temps[prev_idx]
+            temp_ok = ((curr_t !== missing && curr_t <= 2.5) || (prev_t !== missing && prev_t <= 2.5))
+        end
+        precip_ok = true
+        if precips !== nothing
+            curr_p = precips[idx]
+            prev_p = precips[prev_idx]
+            precip_ok = ((curr_p !== missing && curr_p >= 2.0) || (prev_p !== missing && prev_p >= 2.0))
+        end
+        return temp_ok || precip_ok
+    end
+
+    groupcols = [col for col in (:Region, :Country) if col in names(df)]
+
+    function process_indices(indices::Vector{Int})
+        isempty(indices) && return
+        depths = df[indices, sn]
+        prev_depth = depths[1]
+        computed[indices[1]] = 0.0
+        for j in 2:length(indices)
+            idx = indices[j]
+            prev_idx = indices[j-1]
+            current_depth = depths[j]
+            if current_depth === missing || prev_depth === missing
+                computed[idx] = 0.0
+                if current_depth !== missing
+                    prev_depth = current_depth
+                end
+                continue
+            end
+            delta = Float64(current_depth) - Float64(prev_depth)
+            if delta > 0 && snow_possible(idx, prev_idx)
+                computed[idx] = delta
+            else
+                computed[idx] = 0.0
+            end
+            prev_depth = current_depth
+        end
+    end
+
     if isempty(groupcols)
-        sort!(df, :Date)
-        diffs = [NaN; diff(df[!, sn])]
-        df[!, new_col] = map(x -> isnan(x) ? 0.0 : max(x, 0.0), diffs)
-        return df
+        order = sortperm(df[!, :Date])
+        process_indices(order)
+    else
+        for sub in groupby(df, groupcols)
+            sort!(sub, :Date)
+            indices = collect(parentindices(sub)[1])
+            process_indices(indices)
+        end
     end
-    for sub in groupby(df, groupcols)
-        sort!(sub, :Date)
-        diffs = [NaN; diff(sub[!, sn])]
-        gains = map(x -> isnan(x) ? 0.0 : max(x, 0.0), diffs)
-        df[!, new_col][sub.row .|> Int] = gains
-    end
+
+    final = Union{Missing,Float64}[existing_new[i] === missing ? computed[i] : existing_new[i] for i in 1:nrow(df)]
+    df[!, new_col] = final
     return df
 end
 

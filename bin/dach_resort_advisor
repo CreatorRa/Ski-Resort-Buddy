@@ -2,6 +2,98 @@
 
 push!(LOAD_PATH, joinpath(@__DIR__, "..", "src"))
 
-using SkiLookup
+function stdin_is_tty()
+    fd = try
+        Base.fd(stdin)
+    catch
+        return false
+    end
+    fd < 0 && return false
+    try
+        return ccall(:isatty, Cint, (Cint,), fd) == 1
+    catch
+        return false
+    end
+end
+
+function is_missing_dependency_error(err::Any)
+    if err isa ArgumentError
+        return occursin("is required but does not seem to be installed", err.msg)
+    elseif err isa LoadError
+        return is_missing_dependency_error(err.error)
+    end
+    return false
+end
+
+function missing_package_name(err::Any)
+    if err isa ArgumentError
+        match = match(r"Package ([^ ]+)", err.msg)
+        return match === nothing ? nothing : match.captures[1]
+    elseif err isa LoadError
+        return missing_package_name(err.error)
+    end
+    return nothing
+end
+
+function try_load_skilookup()
+    try
+        Core.eval(Main, :(using SkiLookup))
+        return (true, nothing, nothing)
+    catch err
+        return (false, err, Base.catch_backtrace())
+    end
+end
+
+function prompt_instantiate(missing::Vector{String})
+    println("Detected missing packages: " * join(missing, ", "))
+    println("You can install them by running `julia --project=. -e \"using Pkg; Pkg.instantiate()\"`.")
+    stdin_is_tty() || return false
+    print("Run `Pkg.instantiate()` now? (y/N) ")
+    flush(stdout)
+    response = try
+        readline()
+    catch
+        ""
+    end
+    lowercase(strip(response)) in ("y", "yes", "j", "ja")
+end
+
+success, err, err_bt = try_load_skilookup()
+ran_instantiate = Ref(false)
+if !success
+    if err !== nothing && is_missing_dependency_error(err)
+        missing = String[]
+        pkg = missing_package_name(err)
+        pkg !== nothing && push!(missing, pkg)
+        if isempty(missing)
+            missing = ["project dependencies"]
+        end
+        if prompt_instantiate(missing)
+            try
+                import Pkg
+                println("Running Pkg.instantiate() ...")
+                Pkg.instantiate()
+                ran_instantiate[] = true
+            catch install_err
+                println("Failed to instantiate dependencies: " * sprint(showerror, install_err))
+                exit(1)
+            end
+            success, err, err_bt = try_load_skilookup()
+        else
+            exit(1)
+        end
+    end
+
+    if !success
+        err === nothing || Base.display_error(stderr, err, err_bt)
+        exit(1)
+    end
+end
+
+if ran_instantiate[]
+    println("Dependencies installed. Launching SkiLookup...")
+else
+    println("All project dependencies available. Launching SkiLookup...")
+end
 
 SkiLookup.main()

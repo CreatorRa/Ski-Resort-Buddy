@@ -1,0 +1,161 @@
+#--- Swiss Data processing ---
+
+using DataFrames
+using CSV
+
+filepath1 = "c:\\Users\\Carter\\OneDrive\\Documents\\KLU\\KLU Studies\\Scientific Programming\\Clean Data\\more data\\data_monthly_CH_SLF.csv"
+
+df = CSV.read(filepath1, DataFrame) #This writes the CSV into a dataframe
+
+columns_to_drop =[
+    "SCD1gt",
+    "SCD10",
+    "SCD20",	
+    "SCD30",	
+    "SCD50",	
+    "SCD100",
+    "HSmean_gapfill",
+    "frac_gapfilled",
+    "HSmax_gapfill",
+    "SCD1_gapfill",
+    "SCD1gt_gapfill",
+    "SCD10_gapfill",
+    "SCD20_gapfill",
+    "SCD30_gapfill",
+    "SCD50_gapfill",
+    "SCD100_gapfill"
+    ]
+select!(df, Not(columns_to_drop)) #Removing unnecessary columns from the dataset.
+
+dropmissing!(df, :HNsum) #This removes missing values for the Snow Depth varaible.
+
+rename!(df, "Name" => "Region") #These functions rename the varaibles to improve readability. 
+rename!(df, "HNsum" => "Snow Depth (cm)")
+rename!(df, "HSmean" => "Mean Snow Depth (cm)")
+rename!(df, "HSmax" => "Max Snow Depth (cm)")
+rename!(df, "SCD1" => "Days where AVG Temp < 0C")
+rename!(df, "year" => "Date")
+
+insertcols!(df, 2, :Country => "Switzerland") # This code adds in a column for the country Switzerland. 
+
+#The code below further cleans up the values by removing uncessary suffiexs making the values more uniform
+df.Region = replace.(df.Region, "_CH_SLF" => "")
+df.Region = replace.(df.Region, "Davos_Fluelastr_" => "Davos")
+df.Region = replace.(df.Region, "St_Moritz" => "St Moritz")
+
+#-- End of Swiss Data processing --
+
+#-- Germany Data processing --
+
+filepath2 = "C:\\Users\\Carter\\OneDrive\\Documents\\KLU\\KLU Studies\\Scientific Programming\\Clean Data\\more data\\data_monthly_DE_DWD.csv"
+
+df2 = CSV.read(filepath2, DataFrame)
+
+# Remove unnecessary columns
+columns_to_drop =[
+    "SCD1gt",
+    "SCD10",
+    "SCD20",	
+    "SCD30",	
+    "SCD50",	
+    "SCD100",
+    "HSmean_gapfill",
+    "frac_gapfilled",
+    "HSmax_gapfill",
+    "SCD1_gapfill",
+    "SCD1gt_gapfill",
+    "SCD10_gapfill",
+    "SCD20_gapfill",
+    "SCD30_gapfill",
+    "SCD50_gapfill",
+    "SCD100_gapfill"
+    ]
+select!(df2, Not(columns_to_drop))
+dropmissing!(df2, :HNsum)
+
+rename!(df2, "Name" => "Region")
+rename!(df2, "HNsum" => "Snow Depth (cm)")
+rename!(df2, "HSmean" => "Mean Snow Depth (cm)")
+rename!(df2, "HSmax" => "Max Snow Depth (cm)")
+rename!(df2, "SCD1" => "Days where AVG Temp < 0C")
+rename!(df2, "year" => "Date")
+
+insertcols!(df2, 2, :Country => "Germany")
+
+df2.Region = replace.(df2.Region, "Berchtesgaden_KKst_" => "Berchtesgaden")
+df2.Region = replace.(df2.Region, "Feldberg_Schwarzwald" => "Feldberg")
+df2.Region = replace.(df2.Region, "Garmisch_Partenkirchen" => "Garmisch-Partenkirchen")
+df2.Region = replace.(df2.Region, "Oberndorf_Neckar" => "Oberstdorf")
+
+#column_check = ["Region"]
+#Unique_values = unique(df2[:, column_check])
+#println("Unique values in 'Region' column:")
+#println(Unique_values)
+
+#-- End of Germany Data processing --
+
+#-- Austria Data Processing ---
+
+
+filepath3= "C:\\Users\\Carter\\OneDrive\\Documents\\KLU\\KLU Studies\\Scientific Programming\\Clean Data\\more data\\data_monthly_AT_HZB.csv"
+df3 = CSV.read(filepath3, DataFrame)
+
+
+colums_to_drop = [
+    "SCD1gt",
+    "SCD10",
+    "SCD20",	
+    "SCD30",	
+    "SCD50",	
+    "SCD100",
+    "HSmean_gapfill",
+    "frac_gapfilled",
+    "HSmax_gapfill",
+    "SCD1_gapfill",
+    "SCD1gt_gapfill",
+    "SCD10_gapfill",
+    "SCD20_gapfill",
+    "SCD30_gapfill",
+    "SCD50_gapfill",
+    "SCD100_gapfill"
+]
+select!(df3, Not(colums_to_drop))
+dropmissing!(df3, :HNsum) 
+
+
+rename!(df3, "Name" => "Region")
+rename!(df3, "HNsum" => "Snow Depth (cm)")
+rename!(df3, "HSmean" => "Mean Snow Depth (cm)")
+rename!(df3, "HSmax" => "Max Snow Depth (cm)")
+rename!(df3, "SCD1" => "Days where AVG Temp < 0C")
+rename!(df3, "year" => "Date")
+
+insertcols!(df3, 2, :Country => "Austria")
+first(df3, 10) 
+
+#--- End of Austria Data processing ---
+
+
+#Combines the dataframes into a single data frame. 
+df_combined = vcat(df, df2, df3)
+
+filepath_combined = "c:\\Users\\Carter\\OneDrive\\Documents\\KLU\\KLU Studies\\Scientific Programming\\Clean Data\\more data\\combined_ski_data.csv"
+df_snow = CSV.read(filepath_combined, DataFrame)
+
+# Load the regional weather/elevation data
+filepath_regions = "c:\\Users\\Carter\\OneDrive\\Documents\\KLU\\KLU Studies\\Scientific Programming\\Clean Data\\more data\\ski-regions-data.csv"
+df_regions = CSV.read(filepath_regions, DataFrame)
+
+rename!(df_snow, "Snow Depth (cm)" => "Monthly Snow Depth (cm)")
+rename!(df_regions, "Snow Depth (cm)" => "Daily Snow Depth (cm)")
+# The 'Date' in the regional data is a daily date, which we'll keep.
+# The 'Date' in the combined snow data is the year, so let's rename it for clarity.
+rename!(df_snow, "Date" => "Year")
+
+df_final = innerjoin(df_snow, df_regions, on = [:Region, :Country])
+
+println("The final DataFrame has ", nrow(df_final), " rows and ", ncol(df_final), " columns.")
+println("\nFinal column names in the joined DataFrame:")
+filter!(:Year => >=(2000),df_final)
+
+println(first(df_final, 10))

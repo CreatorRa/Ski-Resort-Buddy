@@ -1,75 +1,65 @@
 # Ski-Resort-Buddy
 
-This project is a Julia-based data analytics tool that ranks ski resorts by weather-related attributes. The system evaluates snowfall, temperature, and rainfall to generate a composite score for each resort, enabling better decision-making for tourism, travel, and business planning.
+Ski-Resort-Buddy is a Julia CLI that ranks alpine resorts by weather, snow quality, and user-defined priorities. A guided menu walks you through the latest dataset (downloaded automatically from Supabase and cached locally) and lets you explore yearly snowfall leaders, monthly summaries, and deep regional dives with optional plots.
 
-# Aim of the project
-<ul>
-<li>Provide a data-driven ranking system for ski resorts</li>
-<li>Demonstrate how Julia can be used for real-world analytics workflows</li>
-</ul>
+## Highlights
 
-Create a foundation for future extensions
-<ul>
-  <li>Adjustable attribute weights</li>
-  <li>Distance-based filtering (e.g., proximity to a city)</li>
-  <li>Integration with live weather APIs</li>
-  <li>Additional environmental or business attributes (e.g., ticket prices, amenities)</li>
-</ul>
+- **One-command menu** – `julia --project=. bin/dach_resort_advisor menu` prompts for weights, lets you focus on a country, and keeps looping until you exit.
+- **Remote dataset, cached offline** – the current CSV is fetched once and reused (`data/remote_cache/`). No manual downloads needed.
+- **Yearly snowfall leaderboard** – the former “daily” list now reports total fresh snow per region across the last 12 months for more realistic comparisons.
+- **Region deep dive** – after running a report you can pick regions by table rank or name, view history, and optionally save snow or attribute plots.
+- **Custom weights** – adjust the five core metrics (fresh snow, snow depth, temperature, precipitation, wind) interactively or via CLI flags; the weighted score is reflected everywhere in the report.
 
-<ul>Possible Datasources: 
-    <li>https://data.hub.geosphere.at/ -- Austria
-    <li>https://opendatadocs.meteoswiss.ch/ -- Switzerland
-    <li>https://www.dwd.de/EN/ourservices/opendata/opendata.html -- Germany
-    <li>https://www.smhi.se/en/research/about-us/open-access-to-data-for-research-and-development -- Sweden
+## Getting Started
 
-<ul>API's: 
-    <li>https://open-meteo.com/en/docs -- Lots of Weather Data for different Countries.
-    <li>https://openweathermap.org/current
-    <li>https://www.icpac.net/open-data-sources/
-    <li>https://data.europa.eu/data/datasets/0bd84be4-cec8-4180-97a6-8b3adaac4d26?locale=en
-    <li>https://github.com/open-meteo/open-meteo
-
-## 🚀 Running the DACH Resort Advisor
-
-1. Open a terminal in the project root (`Ski-Resort-Buddy`).
-2. Install dependencies (once):
+1. Install dependencies (once):
    ```bash
    julia --project=. -e 'import Pkg; Pkg.instantiate()'
    ```
-3. (Optional) Place `ski-regions-data.csv` in the root or set `CSV_PATH=/absolute/path/to/your.csv`.
-4. Use the commands below to explore the data.
+2. Launch the menu:
+   ```bash
+   julia --project=. bin/dach_resort_advisor menu
+   ```
+3. Follow the prompts:
+   - Adjust metric weights (sum 100) or press Enter to retain the defaults.
+   - Choose a country or leave blank to analyse all regions.
+   - Review the yearly snowfall leaderboard and monthly overview, then select a region for a deep dive.
+   - When asked, choose whether to create snow trend or attribute plots (saved to `plots/`).
 
-## 🧭 Command Cheat Sheet
+## Non-interactive Usage
 
-| Command | Description |
-| --- | --- |
-| `julia --project=. bin/dach_resort_advisor menu` | Simple terminal menu (Start, optional country filter, Exit). |
-| `julia --project=. bin/dach_resort_advisor report` | Full terminal dashboard (monthly snapshot, leaderboards, QC, summaries). |
-| `julia --project=. bin/dach_resort_advisor list` | Lists every available DACH region that can be queried. |
-| `julia --project=. bin/dach_resort_advisor region "Zermatt"` | Deep dive into one resort (replace `"Zermatt"` with any region name from the list). |
-| `julia --project=. bin/dach_resort_advisor report --season WINTER` | Run the dashboard focusing on winter months only (accepts `WINTER`, `SUMMER`, `ALL`). |
-| `julia --project=. bin/dach_resort_advisor report --from 2024-11-01 --to 2025-04-30` | Limit the data window using custom date filters. |
+The classic commands still exist if you prefer scripting:
+- `julia --project=. bin/dach_resort_advisor report` – run the full report without the menu.
+- `julia --project=. bin/dach_resort_advisor list` – list all available regions.
+- `julia --project=. bin/dach_resort_advisor region "Zermatt"` – jump straight to a region summary.
+- Filters (`--season`, `--from`, `--to`) and weight flags (`--weight-snow-new`, etc.) remain available for automation.
 
-Environment helpers: set `REGION="Verbier"` to preselect a region or `CSV_PATH=/path/to/data.csv` to override the dataset before running the script.
-The menu allows you to choose a country interactively before launching the dashboard; leave the prompt empty to analyse all countries.
-Calling the script without arguments now opens the menu automatically.
+## Notes
 
-## 📈 Snow Trend Plots
+- The tool detects non-interactive environments and skips prompts automatically; you can also set `FORCE_WEIGHT_PROMPT=false` or `--no-ask-weights` to suppress the weight dialog.
+- Override the dataset with `CSV_PATH=/absolute/path.csv` if you need a custom file.
 
-- The `region` command now saves a PNG chart highlighting recent snow depth trends for the selected resort.
-- Images are stored in the `plots/` folder (auto-created if needed) with names such as `zermatt_snow_trend.png`.
-- The chart overlays daily snow depth (line) with fresh snowfall (bars) using the last few months of data.
-- Make sure the plotting dependency is available once via:
-  ```bash
-  julia --project=. -e 'import Pkg; Pkg.add("Plots")'
-  ```
+Enjoy planning your next powder day! 🚡
 
-## 🎚️ Custom Metric Weights
+## Disclaimer and Terms of Use
 
-- Vor dem Start kannst (und musst) du die Wichtigkeit der fünf Kernmetriken (Frischer Schnee, Schneehöhe, Temperatur, Niederschlag, Wind) auf einer Skala von 0–100 eingeben.
-- Höhere Gewichte bedeuten: mehr frischer Schnee/Schneehöhe ist besser, während bei Temperatur, Niederschlag und Wind niedrigere Werte bevorzugt werden.
-- Die Summe muss 100 ergeben; das Menü fordert dich bei Bedarf erneut zur Eingabe auf.
-- Standardwerte (gesamt 100): 30/25/20/15/10
-- Nicht-interaktive Läufe können die Werte vorab setzen, z. B. `--weight-snow-new 40 --weight-temperature 10`.
-- Der Dialog erscheint standardmäßig; nutze `--no-ask-weights` bzw. `FORCE_WEIGHT_PROMPT=false`, um ihn zu unterdrücken.
-- Die Monatsübersicht zeigt den daraus resultierenden `WeightedScore`; Regionsreports spiegeln denselben Score wider.
+This project was developed for purely educational and non-commercial purposes as part of an academic assignment. The data used in this project is sourced from a publicly available dataset hosted on Zenodo, and all rights, ownership, and credit for the data belong entirely to the original authors and publishers.
+
+The information and analysis presented are provided "as is" without any warranty of accuracy, completeness, or suitability for any particular purpose. No commercial use of this data or the resulting analysis is intended or permitted. The use of this data adheres to the Creative Commons Attribution 4.0 International license under which it was published.
+Data Source and Citation
+
+The climatological and snow data used in this project was obtained from the following source:
+
+    Authors: Schmucki, E., Marty, C., Fierz, C., & Lehning, M.
+
+    Year: (2021).
+
+    Title: Long-term snow and climate measurement data from the IMIS and national observation networks.
+
+    Publisher: Zenodo.
+
+    Date Accessed: September 29, 2025.
+
+    DOI (Digital Object Identifier): https://doi.org/10.5281/zenodo.5109574
+
+Please refer to the source link for the original dataset and full metadata.

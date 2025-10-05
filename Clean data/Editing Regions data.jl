@@ -1,7 +1,3 @@
-using CSV
-using Dates
-using DataFrames
-
 filepath_regions = "c:\\Users\\Carter\\OneDrive\\Documents\\KLU\\KLU Studies\\Scientific Programming\\Clean Data\\more data\\ski-regions-data.csv"
 df_regions = CSV.read(filepath_regions, DataFrame)
 df_regions.Date = Date.(df_regions.Date)
@@ -23,14 +19,13 @@ new_order = vcat(
     other_cols[country_index+1:end]   # Add the rest of the columns
 )
 select!(df_regions, new_order)
-
 insertcols!(df_regions, 11, :"Mean Snow Depth (cm)" => missing)
-insertcols!(df_regions, 12, :"Max Snow Depth (cm))" => missing)
-insertcols!(df_regions, 13, :"Days where AVG Temp < 0C" => missing)
+insertcols!(df_regions, 12, :"Monthly Snow Depth (cm)" => missing)
+insertcols!(df_regions, 13, :"Max Snow Depth (cm)" => missing)
+insertcols!(df_regions, 14, :"Days where AVG Temp < 0C" => missing)
 
 # --- Export the edited DataFrame to a new CSV file ---
-first(df_regions, 5)
-Output_filepath = "c:\\Users\\Carter\\OneDrive\\Documents\\KLU\\KLU Studies\\Scientific Programming\\Clean Data\\more data\\Regions edited.csv"
-CSV.write(output_filepath, df_regions)
+#Output_filepath_regions_edited = "c:\\Users\\Carter\\OneDrive\\Documents\\KLU\\KLU Studies\\Scientific Programming\\Clean Data\\more data\\Regions edited.csv"
+#CSV.write(Output_filepath_regions_edited, df_regions)
 
 

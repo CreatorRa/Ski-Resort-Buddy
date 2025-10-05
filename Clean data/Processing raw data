@@ -2,6 +2,7 @@
 
 using DataFrames
 using CSV
+using Dates
 
 filepath1 = "c:\\Users\\Carter\\OneDrive\\Documents\\KLU\\KLU Studies\\Scientific Programming\\Clean Data\\more data\\data_monthly_CH_SLF.csv"
 
@@ -131,31 +132,72 @@ rename!(df3, "SCD1" => "Days where AVG Temp < 0C")
 rename!(df3, "year" => "Date")
 
 insertcols!(df3, 2, :Country => "Austria")
-first(df3, 10) 
 
 #--- End of Austria Data processing ---
 
 
 #Combines the dataframes into a single data frame. 
 df_combined = vcat(df, df2, df3)
+filter!(:Date => >=(2000),df_combined) #This filters the data to only include data from the year 2000 onwards.
+rename!(df_combined, "Date" => "Year")
+rename!(df_combined, "month" => "Month")
+rename!(df_combined, "Snow Depth (cm)" => "Monthly Snow Depth (cm)")
+insertcols!(df_combined, 5, :Day => missing)
+insertcols!(df_combined, 6, :"Elevation (m)" => missing)
+insertcols!(df_combined, 7, :"Wind (Beaufort)" => missing)
+insertcols!(df_combined, 8, :"Temperature (°C)" => missing)
+insertcols!(df_combined, 9, :"Precipitation (mm)" => missing)
+insertcols!(df_combined, 10,:"Daily Snow Depth (cm)" => missing)
 
-filepath_combined = "c:\\Users\\Carter\\OneDrive\\Documents\\KLU\\KLU Studies\\Scientific Programming\\Clean Data\\more data\\combined_ski_data.csv"
-df_snow = CSV.read(filepath_combined, DataFrame)
 
-# Load the regional weather/elevation data
+#column_check = ["Country"]
+#Unique_values = unique(df_combined[:, column_check])
+#println("Unique values in 'country' column:")
+#println(Unique_values)
+
+#--- Save the combined data to a CSV file ---
+#output_filepath_combined = "C:\\Users\\Carter\\OneDrive\\Documents\\KLU\\KLU Studies\\Scientific Programming\\Clean Data\\more data\\Combined_DACH_data.csv"
+#println("Exporting the combined dataset to '$output_filepath_combined'...")
+#CSV.write(output_filepath_combined, df_combined)
+
 filepath_regions = "c:\\Users\\Carter\\OneDrive\\Documents\\KLU\\KLU Studies\\Scientific Programming\\Clean Data\\more data\\ski-regions-data.csv"
 df_regions = CSV.read(filepath_regions, DataFrame)
+df_regions.Date = Date.(df_regions.Date)
+df_regions.Year = year.(df_regions.Date)
+df_regions.Month = month.(df_regions.Date)
+df_regions.Day = day.(df_regions.Date)
 
-rename!(df_snow, "Snow Depth (cm)" => "Monthly Snow Depth (cm)")
+select!(df_regions, Not(:Date))
 rename!(df_regions, "Snow Depth (cm)" => "Daily Snow Depth (cm)")
-# The 'Date' in the regional data is a daily date, which we'll keep.
-# The 'Date' in the combined snow data is the year, so let's rename it for clarity.
-rename!(df_snow, "Date" => "Year")
 
-df_final = innerjoin(df_snow, df_regions, on = [:Region, :Country])
+sort!(df_regions, :Region)
+all_cols = names(df_regions)
+date_cols_to_move = ["Year", "Month", "Day"]
+other_cols = setdiff(all_cols, date_cols_to_move)
+country_index = findfirst(isequal("Country"), other_cols)
+new_order = vcat(
+    other_cols[1:country_index],      # Columns up to and including 'Country'
+    date_cols_to_move,                # Insert the date columns here
+    other_cols[country_index+1:end]   # Add the rest of the columns
+)
+select!(df_regions, new_order)
+insertcols!(df_regions, 11, :"Mean Snow Depth (cm)" => missing)
+insertcols!(df_regions, 12, :"Monthly Snow Depth (cm)" => missing)
+insertcols!(df_regions, 13, :"Max Snow Depth (cm)" => missing)
+insertcols!(df_regions, 14, :"Days where AVG Temp < 0C" => missing)
 
-println("The final DataFrame has ", nrow(df_final), " rows and ", ncol(df_final), " columns.")
-println("\nFinal column names in the joined DataFrame:")
-filter!(:Year => >=(2000),df_final)
+# --- Export the edited DataFrame to a new CSV file ---
+#Output_filepath_regions_edited = "c:\\Users\\Carter\\OneDrive\\Documents\\KLU\\KLU Studies\\Scientific Programming\\Clean Data\\more data\\Regions edited.csv"
+#CSV.write(Output_filepath_regions_edited, df_regions)
 
-println(first(df_final, 10))
+# --- Append the two dataframes ---
+final_col_order = names(df_combined)
+df_regions_aligned = select(df_regions, final_col_order, :) # Reorder columns to match df_combined
+df_appended = vcat(df_combined, df_regions_aligned)
+
+#first(df_appended, 5)
+#last(df_appended, 5)
+
+# --- Export the final appended DataFrame to a new CSV file ---
+#output_filepath_final = "c:\\Users\\Carter\\OneDrive\\Documents\\KLU\\KLU Studies\\Scientific Programming\\Clean Data\\more data\\DACH_SKi_Resort_data.csv"
+#CSV.write(output_filepath_final, df_appended)

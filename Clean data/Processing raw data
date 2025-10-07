@@ -1,8 +1,22 @@
-#--- Swiss Data processing ---
-
 using DataFrames
 using CSV
 using Dates
+
+"""
+    process_country_data(filepath, country_name, region_replacements)
+
+Loads, cleans, and transforms a country's monthly ski data from a given CSV file.
+This function handles dropping unnecessary columns, removing missing values,
+renaming columns for clarity, adding a country identifier, and cleaning region names.
+
+# Arguments
+- `filepath::String`: The full path to the input CSV file.
+- `country_name::String`: The name of the country to add to the 'Country' column.
+- `region_replacements::Vector{Pair{String, String}}`: A list of text replacements to apply to the region names.
+
+# Returns
+- `DataFrame`: A cleaned and processed DataFrame for the specified country.
+"""
 
 filepath1 = "c:\\Users\\Carter\\OneDrive\\Documents\\KLU\\KLU Studies\\Scientific Programming\\Clean Data\\more data\\data_monthly_CH_SLF.csv"
 

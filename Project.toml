@@ -1,4 +1,5 @@
 name = "SkiLookup"
+uuid = "943bc799-159c-4f75-8f2c-892925582ac0"
 version = "0.1.0"
 
 [deps]
@@ -12,3 +13,9 @@ PrettyTables = "08abe8d2-0d0c-5749-adfa-8a2ac140af0d"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 SHA = "ea8e919c-243c-51af-8825-aaa63cd721ce"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+
+[extras]
+Test = "8dfed614-5729-5b8a-8193-9e6ff0a1e70d"
+
+[targets]
+test = ["Test"]

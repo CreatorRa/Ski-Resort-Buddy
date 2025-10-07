@@ -1,4 +1,4 @@
-2#!/usr/bin/env julia
+#!/usr/bin/env julia
 
 push!(LOAD_PATH, joinpath(@__DIR__, "..", "src"))
 
@@ -96,5 +96,4 @@ else
     println("All project dependencies available. Launching SkiLookup...")
 end
 
-include(joinpath(@__DIR__, "..", "test", "runtests.jl"))
 SkiLookup.main()

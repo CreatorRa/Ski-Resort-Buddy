@@ -1,4 +1,5 @@
 name = "SkiLookup"
+uuid = "943bc799-159c-4f75-8f2c-892925582ac0"
 version = "0.1.0"
 
 [deps]

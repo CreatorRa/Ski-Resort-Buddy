@@ -30,6 +30,17 @@ The data used in the project can be found here: https://www.kaggle.com/datasets/
    - Review the yearly snowfall leaderboard and monthly overview, then select a region for a deep dive.
    - When asked, choose whether to create snow trend or attribute plots (saved to `plots/`).
 
+
+
+## Testing:
+
+This project has Test included to check functioning of the program. Follow the steps to run test.
+From the project directory, type the following command:
+```bash
+Tests: julia --project=. test/runtests.jl
+ ```
+
+
 ## Non-interactive Usage
 
 The classic commands still exist if you prefer scripting:

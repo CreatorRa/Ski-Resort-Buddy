@@ -1,0 +1,91 @@
+Documentation on Ski-Lookup
+===========================
+
+Project Overview
+----------------
+Ski-Lookup is a Julia command line toolkit that evaluates alpine ski resorts using daily snow and weather observations. The tool automatically downloads the most recent dataset (cached locally), normalises the schema, computes fresh-snow deltas, and presents actionable reports through an interactive menu or scripted commands. Weighted scoring lets riders prioritise fresh powder, deep base, or calmer weather depending on trip goals.
+
+Repository Structure
+--------------------
+- bin\dach_resort_advisor: Bootstraps the CLI. It checks for missing packages, offers to run Pkg.instantiate(), then calls SkiLookup.main().
+- src\SkiLookup.jl: Module root that exposes main(), sets shared constants (dataset URL, cache paths, command prefix), and includes all submodules.
+- src\cli.jl: Parses command line arguments and environment variables, applies language preferences, and routes to the chosen subcommand.
+- src\menu.jl: Implements the interactive text UI where users can rerun reports, filter by country, and adjust weights.
+- src\reporting.jl: Generates the yearly snowfall leaderboard, weighted monthly tables, narrative hints, and per-resort deep dives with optional plots.
+- src\transforms.jl: Handles dataset discovery, remote downloading into data\remote_cache, column normalisation, derived metrics such as Snow_New (cm), and filter application.
+- src\weights.jl: Provides default weight presets, environment flag handling, parsing helpers, and normalisation logic that keeps totals at 100 percent.
+- src\utils.jl: Shared helpers for text normalisation, TTY checks, speech command execution, numeric cleaning, and plot directory management.
+- src\localization.jl: Contains English and German translation tables plus utilities to change the active language.
+- test\runtests.jl: Focused unit tests that verify numeric cleaning, rolling averages, country canonicalisation, and weight parsing behaviour.
+- data\remote_cache\: Stores downloaded CSV files keyed by SHA1 so repeated runs operate offline.
+- plots\: Destination folder for PNG charts generated during reports.
+
+Supported Commands
+------------------
+Use the launcher script for consistent setup: `julia --project=. bin/dach_resort_advisor <command>`.
+- menu (default): Interactive loop with prompts for weight adjustments, country focus, and plotting options.
+- report: Runs the full report once with the current filters.
+- list: Prints all known regions.
+- region "<name>": Skips directly to the detailed view for a specific resort.
+
+Data Handling Workflow
+----------------------
+1. resolve_csv_path() inspects CLI flags, environment variables, and defaults to locate a dataset.
+2. Remote URLs are downloaded once to data\remote_cache\sha_filename.csv and reused on later runs.
+3. Date columns are auto-detected, converted to Date values, and renamed to :Date, while metric headers are harmonised to canonical labels.
+4. Metric columns are coerced to Float64 where possible so statistical operations work reliably.
+5. add_newsnow!() derives Snow_New (cm) per region by tracking increases in snow depth that align with realistic temperature and precipitation patterns.
+6. apply_filters() trims the DataFrame using from/to dates, season filters, region, or country requirements.
+7. canonical_country() reconciles ISO codes and synonyms (DE, Deutschland, AUT, etc.) to consistent names for grouping.
+
+Scoring and Weights
+-------------------
+- Core metrics: fresh snow, snow depth, temperature, precipitation, wind.
+- DEFAULT_METRIC_WEIGHTS emphasise fresh snow and base depth while still considering comfort factors.
+- METRIC_WEIGHT_CONFIG maps each metric to display labels, environment variables, and whether higher or lower values are preferred.
+- Presets (balanced, powder, family, sunny) offer quick profiles in the interactive flow, and can be tweaked manually afterwards.
+- CLI flags (`--weight-snow-new`, `--weight-temperature`, etc.) or environment variables (`WEIGHT_SNOW_NEW`, etc.) allow non-interactive overrides.
+- normalize_weights!() rescales weights to sum to 100 percent and restores defaults when all metrics are zeroed.
+
+Interactive Reporting Flow
+--------------------------
+1. The CLI prints active filters, dataset origin, and weight profile.
+2. A yearly fresh snow leaderboard highlights top performers across the filtered range; optional daily scoreboard appears when weights remain at defaults.
+3. print_monthly_overview_for_all_regions() produces a PrettyTables summary of monthly metrics plus narrative tips.
+4. Users can select a resort by ranking or name to inspect history, weighted scores, and trend plots.
+5. prompt_region_metric_plots() gives an opportunity to save snow trend and attribute comparisons into plots\.
+6. The menu loop returns users to the main options until they choose to exit.
+
+Localisation and Speech Support
+-------------------------------
+- Support for English and German is baked into localization.jl. Additional languages can be added by extending the translation table and available_languages().
+- Environment variables SKI_LOOKUP_LANG, APP_LANGUAGE, LANGUAGE, or LANG preselect the interface language. Setting SKI_LOOKUP_SKIP_LANGUAGE_PROMPT=1 disables the interactive language question.
+- Speech commands can be enabled by setting SPEECH_CMD or SPEECH_TO_TEXT_CMD to an executable that outputs recognised text; readline_with_speech() falls back to keyboard input if speech capture fails.
+
+Environment Variables (Selected)
+--------------------------------
+- CSV_PATH: Override the dataset location (file path or URL).
+- FROM_DATE / TO_DATE: Apply default date filters (YYYY-MM-DD).
+- SEASON: Filter by season keyword (WINTER, SUMMER, ALL).
+- REGION / COUNTRY: Pre-filter to a specific area.
+- FORCE_WEIGHT_PROMPT: Force or suppress the weight adjustment dialog.
+- WEIGHT_*: Provide numeric overrides for each metric (e.g., WEIGHT_SNOW_NEW=40).
+- REGION_METRICS: Preselect plots to export during region deep dives.
+- SKILOOKUP_BOOT_PREVIEW=1: Print a preview of the dataset when the module loads.
+
+Testing
+-------
+- Run the suite with `julia --project=. test/runtests.jl`.
+- Tests cover numeric sanitisation, rolling averages, weight parsing, boolean parsing, and default normalisation behaviour.
+- Extend test coverage alongside new helper functions or metric transformations.
+
+Extending the Project
+---------------------
+- New datasets: confirm there is a detectable date column and extend normalize_columns!() for additional metric headers.
+- Additional metrics: update METRIC_WEIGHT_CONFIG, localisation strings, default weight maps, and reporting outputs.
+- New locales: add translation columns in localization.jl and register the language in available_languages().
+- Alternative front ends: call SkiLookup.main() or reuse transforms/reporting logic from other Julia programs or services.
+
+Data Rights and Attribution
+---------------------------
+The bundled README cites the Zenodo dataset by Schmucki, Marty, Fierz, and Lehning (2021). Ski-Lookup is designed for educational, non-commercial use under the original Creative Commons Attribution 4.0 license. Update the citation if the source dataset changes.

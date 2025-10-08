@@ -2,10 +2,17 @@ using .Localization: t
 import Base: lowercase
 
 """
-Weight configuration & prompting utilities: centralises how scoring metrics are
-described, defaulted, overridden (ENV/CLI), and normalised for interactive/report
-runs.
+Weight helpers: this module keeps everything related to metric weighting together.
+It defines:
+  • the available metrics and their defaults
+  • optional presets users can choose from
+  • parsing helpers for CLI/environment overrides
+  • interactive prompts that guide manual adjustments
+All weight-related tasks start here.
 """
+# METRIC_WEIGHT_CONFIG: maps each metric key to the column we look at, the prompt text,
+# the environment override name, and whether a higher or lower value should be treated
+# as better.
 const METRIC_WEIGHT_CONFIG = (
     :snow_new => (column=Symbol("Avg Snow_New (cm)"), prompt_key=:weight_prompt_snow_new, label_key=:weight_label_snow_new, env="WEIGHT_SNOW_NEW", preference=:higher),
     :snow_depth => (column=Symbol("Avg Snow Depth (cm)"), prompt_key=:weight_prompt_snow_depth, label_key=:weight_label_snow_depth, env="WEIGHT_SNOW_DEPTH", preference=:higher),
@@ -22,6 +29,8 @@ const DEFAULT_METRIC_WEIGHTS = Dict(
     :wind => 10.0
 )
 
+# WEIGHT_PRESET_CONFIG: defines the preset bundles (balanced, powder, family, sunny)
+# including display names, helpful aliases, and the weight values they apply.
 const WEIGHT_PRESET_CONFIG = (
     (key=:balanced,
      name_key=:weights_preset_balanced_name,
@@ -63,6 +72,8 @@ const WEIGHT_PRESET_CONFIG = (
     ))
 )
 
+# METRIC_WEIGHT_FLAGS: connects CLI flags (for example `--weight-snow-new`) to the
+# internal metric keys so overrides land in the correct slot.
 const METRIC_WEIGHT_FLAGS = Dict(
     "--weight-snow-new" => :snow_new,
     "--weight-snow-depth" => :snow_depth,
@@ -72,20 +83,20 @@ const METRIC_WEIGHT_FLAGS = Dict(
 )
 
 """
-    clone_metric_weights()
+clone_metric_weights()
 
-Return a fresh copy of the default metric weights dictionary so downstream callers can
-mutate the map without affecting the global defaults.
+Return a copy of the default weights so callers can tweak the values without touching
+the shared defaults.
 """
 function clone_metric_weights()
     return Dict(key => DEFAULT_METRIC_WEIGHTS[key] for (key, _) in METRIC_WEIGHT_CONFIG)
 end
 
 """
-    parse_weight_value(raw)
+parse_weight_value(raw)
 
-Normalise user-provided weight strings by trimming whitespace, converting commas to
-decimal points, and attempting to parse a `Float64`. Returns `nothing` on failure.
+Turn a user-supplied weight (like "25" or "25%") into a number. Returns `nothing`
+when the text cannot be understood.
 """
 function parse_weight_value(raw::AbstractString)
     normalized = replace(strip(raw), "," => ".")
@@ -96,10 +107,10 @@ function parse_weight_value(raw::AbstractString)
 end
 
 """
-    parse_bool(value)
+parse_bool(value)
 
-Interpret typical boolean string forms (`"true"`, `"1"`, `"yes"`, etc.) and return
-`true`/`false`, or `nothing` when the token cannot be classified.
+Read common yes/no strings and return `true`, `false`, or `nothing` if the value is
+ambiguous.
 """
 function parse_bool(value::AbstractString)
     normalized = lowercase(strip(value))
@@ -109,10 +120,10 @@ function parse_bool(value::AbstractString)
 end
 
 """
-    apply_weight_env_overrides!(weights)
+apply_weight_env_overrides!(weights)
 
-Apply environment-variable overrides (`WEIGHT_*`) to the weight dictionary in-place.
-Invalid values emit warnings while leaving the current weight untouched.
+Check environment variables like `WEIGHT_SNOW_NEW` and update the weight map when the
+values look valid. Warnings are printed otherwise.
 """
 function apply_weight_env_overrides!(weights::Dict{Symbol,Float64})
     for (key, cfg) in METRIC_WEIGHT_CONFIG
@@ -129,6 +140,12 @@ function apply_weight_env_overrides!(weights::Dict{Symbol,Float64})
     return weights
 end
 
+"""
+apply_weight_preset!(weights, preset)
+
+Copy the numbers from a preset into the weight map and normalise the result so the
+weights still add up to 100.
+"""
 function apply_weight_preset!(weights::Dict{Symbol,Float64}, preset)
     for (key, _) in METRIC_WEIGHT_CONFIG
         weights[key] = get(preset.weights, key, get(DEFAULT_METRIC_WEIGHTS, key, 0.0))
@@ -137,6 +154,16 @@ function apply_weight_preset!(weights::Dict{Symbol,Float64}, preset)
     return weights
 end
 
+"""
+prompt_weight_profile!(weights; force=false)
+
+Show the preset list (balanced, powder, family, sunny) and let the user pick. Returns
+one of four symbols:
+  • `:skip`           – nothing was changed, move along
+  • `:manual`         – user wants to enter every weight manually
+  • `:preset`         – preset applied, no further adjustments requested
+  • `:preset_manual`  – preset applied, user wants to tweak numbers afterwards
+"""
 function prompt_weight_profile!(weights::Dict{Symbol,Float64}; force::Bool=false)
     if !(stdin_is_tty() || force)
         return :skip
@@ -206,11 +233,11 @@ function prompt_weight_profile!(weights::Dict{Symbol,Float64}; force::Bool=false
 end
 
 """
-    prompt_metric_weights!(weights; force=false)
+prompt_metric_weights!(weights; force=false)
 
-Interactively collect metric weights from the user. Non-interactive sessions can set
-`force=true` to display the prompt regardless of TTY detection. Inputs must be between
-0 and 100 and the final sum must equal 100.
+Ask the user for each metric weight one by one. Pressing Enter keeps the current
+value. The function loops until the total equals 100, otherwise it restarts the
+questions with a friendly reminder.
 """
 function prompt_metric_weights!(weights::Dict{Symbol,Float64}; force::Bool=false)
     if !(stdin_is_tty() || force)
@@ -252,10 +279,10 @@ function prompt_metric_weights!(weights::Dict{Symbol,Float64}; force::Bool=false
 end
 
 """
-    normalize_weights!(weights)
+normalize_weights!(weights)
 
-Scale all weight values so that their sum equals 100. When the total is non-positive,
-the defaults are restored.
+Rescale all weights so they sum to 100. If the sum is zero or negative we warn the
+user, restore the defaults, and return those.
 """
 function normalize_weights!(weights::Dict{Symbol,Float64})
     total = sum(values(weights))
@@ -274,10 +301,13 @@ function normalize_weights!(weights::Dict{Symbol,Float64})
 end
 
 """
-    prepare_weights!(weights; force, prompt)
+prepare_weights!(weights; force, prompt)
 
-Optionally prompt the user for custom weights (honouring forced prompts for non-TTY
-sessions). Returns the mutated dictionary for convenience.
+High-level helper used by the CLI/menu. Steps:
+  1. Optionally show the preset picker (forced when `force=true` without a TTY).
+  2. If the user wants manual input, call `prompt_metric_weights!`.
+  3. Normalise weights before returning them.
+Always returns the updated dictionary.
 """
 function prepare_weights!(weights::Dict{Symbol,Float64}; force::Bool, prompt::Bool)
     if prompt

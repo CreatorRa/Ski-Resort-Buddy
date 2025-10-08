@@ -1,13 +1,12 @@
 """
 SkiLookup
-========= 
-Central module that bootstraps the project: loads shared dependencies, provides
-global constants/structs, and exposes the `main()` entry point while including the
-feature-specific submodules (utils, transforms, weights, reporting, menu, CLI).
+=========
+Main module that wires everything together: shared values, helper modules, and the
+`main()` function used by the command-line tool.
 """
 module SkiLookup
 
-include("localization.jl")
+include("language_support.jl")
 
 using CSV
 using DataFrames
@@ -101,7 +100,8 @@ include("utils.jl")
 include("weights.jl")
 include("transforms.jl")
 include("reporting.jl")
-include("menu.jl")
-include("cli.jl")
+using .Reporting: run_report, run_region
+include("interactive_menu.jl")
+include("command_line_interface.jl")
 
 end # module SkiLookup

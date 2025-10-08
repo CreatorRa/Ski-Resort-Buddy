@@ -1,3 +1,8 @@
+"""
+Language support: stores every translated phrase and exposes helpers to switch
+between English and German. Other parts of the app can simply call `t(:key)` and do
+not need to worry about translation details.
+"""
 module Localization
 
 export t, localize, set_language!, current_language, available_languages, DEFAULT_LANGUAGE, is_supported_language, normalize_language
@@ -86,6 +91,7 @@ weight_prompt_temperature	Temperature – cooler is better [0-100%]	Temperatur �
 weight_prompt_precipitation	Precipitation – less rain is better [0-100%]	Niederschlag – weniger Regen ist besser [0-100%]
 weight_prompt_wind	Wind – calmer is better [0-100%]	Wind – ruhiger ist besser [0-100%]
 metric_snow_depth	Snow Depth (cm)	Schneehöhe (cm)
+metric_snow_trend	Snow trend (depth + new snow)	Schneetrend (Höhe + Neuschnee)
 metric_snow_new	New Snow (cm)	Neuschnee (cm)
 metric_temperature	Temperature (°C)	Temperatur (°C)
 metric_precipitation	Precipitation (mm)	Niederschlag (mm)
@@ -217,6 +223,11 @@ prompt_region_another	View another region? (y/N)	Weitere Region ansehen? (y/N)
 prompt_region_next	Next region (number or name, Enter to finish):	Nächste Region (Nummer oder Name, Enter zum Beenden):
 """
 
+"""
+build_translation_strings()
+
+Parse the raw translation table and return a dictionary for each supported language.
+"""
 function build_translation_strings()
     en = Dict{Symbol,String}()
     de = Dict{Symbol,String}()
@@ -237,6 +248,11 @@ end
 const STRINGS = build_translation_strings()
 
 
+"""
+normalize_language(lang)
+
+Tidy up a language token (such as "de-DE") and return a symbol like `:de` or `:en`.
+"""
 function normalize_language(lang)
     raw = lowercase(strip(String(lang)))
     raw == "" && return DEFAULT_LANGUAGE
@@ -258,19 +274,40 @@ function normalize_language(lang)
     return Symbol(candidates[1])
 end
 
+"""
+is_supported_language(lang)
+
+Return `true` when the language token maps to one of the bundles we ship.
+"""
 function is_supported_language(lang)
     sym = normalize_language(lang)
     return haskey(STRINGS, sym)
 end
 
+"""
+available_languages()
+
+Return a list of language codes that can be selected.
+"""
 function available_languages()
     return collect(keys(STRINGS))
 end
 
+"""
+current_language()
+
+Return the language symbol that is currently active.
+"""
 function current_language()
     return ACTIVE_LANGUAGE[]
 end
 
+"""
+string_map(lang)
+
+Fetch the translations dictionary for the requested language, falling back to the
+default language when needed.
+"""
 function string_map(lang::Symbol)
     if haskey(STRINGS, lang)
         return STRINGS[lang]
@@ -279,6 +316,12 @@ function string_map(lang::Symbol)
     end
 end
 
+"""
+set_language!(lang)
+
+Activate a language by symbol or string. Falls back to the default language when the
+requested language is unknown.
+"""
 function set_language!(lang)
     sym = normalize_language(lang)
     if haskey(STRINGS, sym)
@@ -289,6 +332,12 @@ function set_language!(lang)
     return ACTIVE_LANGUAGE[]
 end
 
+"""
+localize(key; kwargs...)
+
+Look up the translation for `key` in the current language and replace any
+`{{placeholder}}` values using the provided keyword arguments.
+"""
 function localize(key::Symbol; kwargs...)
     lang = current_language()
     dict = string_map(lang)

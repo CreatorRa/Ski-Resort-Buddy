@@ -1,15 +1,18 @@
+# Interactive menu orchestration: handles the text UI for the main program loop,
+# including country filtering and optional weight adjustments before calling the
+# reporting workflows.
 using .Localization: t
 
 """
-Interactive menu workflow: handles the TUI navigation to adjust weights, pick
-countries, and launch the reporting view with the desired configuration.
+Interactive menu workflow. Guides the user through the on-screen menu so they can
+pick a country, tweak weights, or jump straight into the reports.
 """
 
 """
-    prompt_country_choice(df)
+prompt_country_choice(df)
 
-Interactively prompt the user to select one of the available countries, returning the
-chosen name as a string or `nothing` when the input is blank or cancelled.
+Show a numbered list of countries and let the user pick one by typing the number or
+the name. Returns the selection or `nothing` if they cancel.
 """
 function prompt_country_choice(df::DataFrame)
     countries = available_countries(df)
@@ -45,10 +48,10 @@ function prompt_country_choice(df::DataFrame)
 end
 
 """
-    run_menu(df, config)
+ask_adjust_weights!(weights)
 
-Drive the interactive main menu, letting users start the report for all countries,
-filter by a chosen country, or exit the application.
+Ask the user whether they want to change the metric weights. If they say yes the
+weight prompt runs and the dictionary is updated in place.
 """
 function ask_adjust_weights!(weights::Dict{Symbol,Float64})
     println(t(:prompt_adjust_weights))
@@ -65,10 +68,22 @@ function ask_adjust_weights!(weights::Dict{Symbol,Float64})
     return false
 end
 
+"""
+report_config_for_menu(base, weights; country=nothing)
+
+Create a copy of the current configuration that uses the supplied weights and
+optional country filter before calling the reporting workflow.
+"""
 function report_config_for_menu(base::CLIConfig, weights::Dict{Symbol,Float64}; country::Union{Nothing,String}=nothing)
     return CLIConfig(:report, base.csv_path, base.runargs, base.region_focus, weights, base.force_weight_prompt, country, base.speech_cmd, base.language, base.language_explicit)
 end
 
+"""
+run_menu(df, config)
+
+Display the looping main menu. Users can explore all regions, focus on one country,
+adjust weights, or exit the program from here.
+"""
 function run_menu(df::DataFrame, config::CLIConfig)
     base_weights = deepcopy(config.weights)
     while true

@@ -1,10 +1,19 @@
+# Command-line interface orchestration: parses arguments, folds in environment defaults,
+# resolves language/weight preferences, and dispatches to reporting/menu flows. This
+# file keeps all CLI-related logic together so the rest of the project can expose
+# simple entry points (`main`, `parse_cli`) without caring about flag parsing details.
 using .Localization: t, set_language!, current_language, available_languages, is_supported_language, normalize_language
 
 """
-CLI coordination: parses arguments/environment, loads data via transforms, and
-dispatches to list/report/region/menu flows exposed by the reporting and menu layers.
+CLI coordination for SkiLookup. This file explains how command-line options are read,
+how defaults from the environment are applied, and which high-level action (report,
+menu, list, region) should run.
 """
 
+"""
+A scratchpad object that keeps everything we learned from the command line while we
+are still reading flags. Once we are done, it is turned into the final `CLIConfig`.
+"""
 mutable struct CLIParseState
     command::Symbol
     csv_path::Union{Nothing,String}
@@ -19,6 +28,12 @@ mutable struct CLIParseState
     language_explicit::Bool
 end
 
+"""
+build_initial_state()
+
+Start a new `CLIParseState` filled with sensible defaults and environment values so
+later steps only need to tweak what the user actually changed.
+"""
 function build_initial_state()
     weights = clone_metric_weights()
     apply_weight_env_overrides!(weights)
@@ -42,6 +57,12 @@ function build_initial_state()
     return state
 end
 
+"""
+apply_env_language!(state)
+
+Check well-known environment variables for language preferences and store the first
+valid hit inside the parse state.
+"""
 function apply_env_language!(state::CLIParseState)
     for (key, explicit_flag) in (("SKI_LOOKUP_LANG", true), ("APP_LANGUAGE", true), ("LANGUAGE", false), ("LANG", false))
         haskey(ENV, key) || continue
@@ -54,6 +75,12 @@ function apply_env_language!(state::CLIParseState)
     end
 end
 
+"""
+apply_force_prompt_env!(state)
+
+Read `FORCE_WEIGHT_PROMPT` from the environment and decide whether the weight prompt
+should always appear. Prints a warning when the value is unclear.
+"""
 function apply_force_prompt_env!(state::CLIParseState)
     haskey(ENV, "FORCE_WEIGHT_PROMPT") || return
     parsed = parse_bool(ENV["FORCE_WEIGHT_PROMPT"])
@@ -64,6 +91,12 @@ function apply_force_prompt_env!(state::CLIParseState)
     state.force_prompt = parsed
 end
 
+"""
+register_language_choice!(state, token; mark_explicit=false)
+
+Try to switch to the language given by `token`. When `mark_explicit` is true we also
+flag that choice so automatic detection will not change it later.
+"""
 function register_language_choice!(state::CLIParseState, token; mark_explicit::Bool=false)
     language, applied = apply_language_choice(token, state.language)
     state.language = language
@@ -73,6 +106,12 @@ function register_language_choice!(state::CLIParseState, token; mark_explicit::B
     return applied
 end
 
+"""
+process_cli_arguments!(state)
+
+Run through every command-line argument, updating the parse state as we go. Flags
+that consume an extra value are handled automatically.
+"""
 function process_cli_arguments!(state::CLIParseState)
     i = 1
     while i <= length(ARGS)
@@ -81,6 +120,12 @@ function process_cli_arguments!(state::CLIParseState)
     end
 end
 
+"""
+handle_cli_argument!(state, arg, index)
+
+Update the parse state for one command-line token. The return value tells the caller
+how many additional tokens were consumed (for example when a flag needs a value).
+"""
 function handle_cli_argument!(state::CLIParseState, arg::String, index::Int)
     next_arg = index < length(ARGS) ? ARGS[index + 1] : nothing
     consumed = 0
@@ -152,6 +197,12 @@ function handle_cli_argument!(state::CLIParseState, arg::String, index::Int)
     return consumed
 end
 
+"""
+    apply_weight_override!(state, flag, value)
+
+Update an individual metric weight based on the CLI flag/value pair, validating both
+the flag name and the provided value.
+"""
 function apply_weight_override!(state::CLIParseState, flag::String, value)
     key = get(METRIC_WEIGHT_FLAGS, flag, nothing)
     if key === nothing
@@ -170,6 +221,12 @@ function apply_weight_override!(state::CLIParseState, flag::String, value)
     state.weights[key] = parsed
 end
 
+"""
+    parse_date_value(raw, warn_key)
+
+Attempt to parse a date string, emitting a localised warning on failure and returning
+`nothing` so invalid input can be ignored gracefully.
+"""
 function parse_date_value(raw::Union{Nothing,String}, warn_key::Symbol)
     raw === nothing && return nothing
     try
@@ -180,6 +237,12 @@ function parse_date_value(raw::Union{Nothing,String}, warn_key::Symbol)
     end
 end
 
+"""
+    finalize_cli_config(state)
+
+Normalise and validate the accumulated parse state, producing a ready-to-use
+`CLIConfig` plus updated speech-command wiring.
+"""
 function finalize_cli_config(state::CLIParseState)
     from_date = parse_date_value(state.from_str, :warn_invalid_from_date)
     to_date = parse_date_value(state.to_str, :warn_invalid_to_date)
@@ -195,10 +258,10 @@ function finalize_cli_config(state::CLIParseState)
 end
 
 """
-    parse_cli()
+parse_cli()
 
-Parse CLI arguments and environment variables into a `CLIConfig`, including the active
-subcommand, data path, filters, weight overrides, and menu-specific flags.
+Read all command-line options and environment variables and turn them into a tidy
+`CLIConfig` object.
 """
 function parse_cli()
     state = build_initial_state()
@@ -207,10 +270,10 @@ function parse_cli()
 end
 
 """
-    main()
+main()
 
-Top-level entry point: assemble the CLI configuration, load data, apply filters, and
-dispatch to the appropriate subcommand before printing closing guidance.
+Entry point used by the executable script. Reads the CLI, loads the data, runs the
+requested command, and says goodbye when finished.
 """
 function main()
     config = parse_cli()
@@ -246,11 +309,22 @@ function main()
     println()
     println(t(:info_terminal_finished))
 end
+"""
+    language_display_name(lang)
+
+Return the translated display name for a language symbol using the localisation table.
+"""
 function language_display_name(lang::Symbol)
     key = Symbol("language_name_" * String(lang))
     return t(key)
 end
 
+"""
+    with_language(config, lang; explicit)
+
+Construct a new `CLIConfig` with the supplied language while copying all other fields,
+optionally flagging the choice as explicit.
+"""
 function with_language(config::CLIConfig, lang::Symbol; explicit::Bool)
     return CLIConfig(
         config.command,
@@ -266,6 +340,12 @@ function with_language(config::CLIConfig, lang::Symbol; explicit::Bool)
     )
 end
 
+"""
+    apply_language_choice(token, fallback)
+
+Normalise a language token and attempt to activate it, returning the effective
+language plus a flag indicating whether the change actually took place.
+"""
 function apply_language_choice(token, fallback_language::Symbol)
     trimmed = strip(String(token))
     trimmed == "" && return (fallback_language, false)
@@ -280,6 +360,12 @@ function apply_language_choice(token, fallback_language::Symbol)
     end
 end
 
+"""
+    maybe_prompt_language(config)
+
+Offer the interactive language prompt when no explicit language was chosen, returning
+an updated `CLIConfig` (or the original when prompting is skipped).
+"""
 function maybe_prompt_language(config::CLIConfig)
     if config.language_explicit || get(ENV, "SKI_LOOKUP_SKIP_LANGUAGE_PROMPT", "0") == "1"
         return config

@@ -33,7 +33,7 @@ Ski-Resort-Buddy is a Julia CLI that ranks alpine resorts by weather, snow quali
 This project has Test included to check functioning of the program. Follow the steps to run test.
 From the project directory, type the following command:
 ```bash
-Tests: julia --project=. test/runtests.jl
+julia --project=. test/runtests.jl
  ```
 
 

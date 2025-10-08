@@ -15,14 +15,20 @@ The data used in the project can be found here: https://www.kaggle.com/datasets/
 
 
 ## Getting Started
-
+How to Run the DACH Ski Resort Advisor
+Open your system's terminal. This is the command line interface for your operating system, not the Julia REPL that starts with julia>. 
+   
+Navigate to your project directory. Use the cd command to go to the folder that contains the Project.toml and Manifest.toml files
+   ```bash
+  cd path/to/your/Ski-Resort-Buddy'
+   ```
 1. Install dependencies (once):
    ```bash
    julia --project=. -e 'import Pkg; Pkg.instantiate()'
    ```
 2. Launch the menu:
    ```bash
-   julia --project=. bin/dach_resort_advisor menu
+   julia --project=. bin/dach_resort_advisor
    ```
 3. Follow the prompts:
    - Adjust metric weights (sum 100) or press Enter to retain the defaults.
@@ -37,7 +43,7 @@ The data used in the project can be found here: https://www.kaggle.com/datasets/
 This project has Test included to check functioning of the program. Follow the steps to run test.
 From the project directory, type the following command:
 ```bash
-Tests: julia --project=. test/runtests.jl
+julia --project=. test/runtests.jl
  ```
 
 

@@ -46,8 +46,6 @@ end
     @test SL.canonical_country(" Liechtenstein ") == "Liechtenstein"
 end
 
-
-
 # Tests weight parsing tolerates whitespace, percentages, and locale decimal separators.
 # Input: string tokens with whitespace, percent, or locale decimal marks. Output: parsed Float64 or nothing.
 @testset "parse_weight_value" begin
@@ -88,7 +86,17 @@ end
     SL.normalize_weights!(zero_weights)
     for (key, value) in SL.DEFAULT_METRIC_WEIGHTS
         @test zero_weights[key] == value
-    end
+end
+
+# Verifies region names are safely converted to filesystem-friendly format.
+# Input: mixed-case string with spaces and symbols. Output: lowercase, underscore-separated string.
+@testset "slugify" begin
+    @test SL.slugify("Saas-Fee (CH)") == "saas_fee_ch"
+    @test SL.slugify("  St. Moritz ") == "st_moritz"
+    @test SL.slugify("Empty__") == "empty"
+    @test SL.slugify("-Empty-") == "empty"
+    @test SL.slugify("_") == "region"
+end
 end
 
 

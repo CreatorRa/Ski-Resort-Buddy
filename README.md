@@ -18,7 +18,7 @@ Ski-Resort-Buddy is a Julia CLI that ranks alpine resorts by weather, snow quali
    ```
 2. Launch the menu:
    ```bash
-   julia --project=. bin/dach_resort_advisor menu
+   julia --project=. bin/dach_resort_advisor
    ```
 3. Follow the prompts:
    - Adjust metric weights (sum 100) or press Enter to retain the defaults.

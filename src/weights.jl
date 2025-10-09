@@ -213,22 +213,8 @@ function prompt_weight_profile!(weights::Dict{Symbol,Float64}; force::Bool=false
         end
         apply_weight_preset!(weights, chosen)
         println(t(:weights_profile_applied; name=t(chosen.name_key)))
-        while true
-            println(t(:weights_profile_adjust_prompt))
-            response = try
-                lowercase(strip(readline_with_speech("> "; fallback_on_empty=true)))
-            catch err
-                isa(err, InterruptException) && rethrow()
-                response = ""
-            end
-            if response in ("", "n", "no", "nein")
-                return :preset
-            elseif response in ("y", "yes", "j", "ja")
-                return :preset_manual
-            else
-                println(t(:weights_profile_invalid))
-            end
-        end
+        println(t(:weights_profile_adjust_prompt))
+        return prompt_yes_no() ? :preset_manual : :preset
     end
 end
 

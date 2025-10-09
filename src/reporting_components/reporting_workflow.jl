@@ -68,13 +68,7 @@ function prompt_region_details(df::DataFrame, ranking::DataFrame; config::CLICon
 
         println()
         println(t(:prompt_region_another))
-        again = try
-            lowercase(readline_with_speech("> "))
-        catch err
-            isa(err, InterruptException) && rethrow()
-            ""
-        end
-        if !(again in ("y", "yes", "j", "ja"))
+        if !prompt_yes_no()
             prompt_session_finish(config)
             return
         end

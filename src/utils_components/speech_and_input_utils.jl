@@ -117,6 +117,34 @@ function readline_with_speech(prompt::AbstractString="> ";
 end
 
 """
+prompt_yes_no(; default=false, invalid_key=:prompt_yes_no_retry, prompt="> ")
+
+Ask the user for a yes/no answer and only accept `y` or `n` (case-insensitive). An
+empty response returns the provided default. Any other input prints a reminder and the
+question repeats.
+"""
+function prompt_yes_no(; default::Bool=false, invalid_key::Symbol=:prompt_yes_no_retry, prompt::AbstractString="> ")
+    while true
+        response = try
+            readline_with_speech(prompt)
+        catch err
+            isa(err, InterruptException) && rethrow()
+            ""
+        end
+
+        response == "" && return default
+        lowered = lowercase(response)
+        if lowered == "y"
+            return true
+        elseif lowered == "n"
+            return false
+        end
+
+        println(t(invalid_key))
+    end
+end
+
+"""
 detect_speech_command()
 
 Look for known helper scripts (`transcribe.sh`, etc.) and return the first command we
@@ -149,15 +177,7 @@ function maybe_prompt_speech_cmd!(current::Union{Nothing,String})
 
     println()
     println(t(:speech_enable_prompt))
-    print("> ")
-    response = try
-        lowercase(strip(readline()))
-    catch err
-        isa(err, InterruptException) && rethrow()
-        ""
-    end
-    affirmative = response in ("y", "yes", "j", "ja")
-    affirmative || return nothing
+    prompt_yes_no() || return nothing
 
     suggestion = detect_speech_command()
     if suggestion !== nothing

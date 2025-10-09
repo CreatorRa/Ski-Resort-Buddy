@@ -278,13 +278,15 @@ requested command, and says goodbye when finished.
 function main()
     config = parse_cli()
     set_language!(config.language)
-    config = maybe_prompt_language(config)
-    set_language!(config.language)
+    println(t(:greeting))
+    if !(config.language_explicit || get(ENV, "SKI_LOOKUP_SKIP_LANGUAGE_PROMPT", "0") == "1")
+        config = maybe_prompt_language(config)
+        set_language!(config.language)
+    end
+    println(t(:greeting_language_confirmation))
     df = load_data(config.csv_path)
     add_newsnow!(df)
     df = apply_filters(df, config.runargs)
-
-    println(t(:greeting))
 
     if isempty(df)
         println(t(:info_no_data_after_filters))

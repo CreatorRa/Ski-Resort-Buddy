@@ -385,13 +385,7 @@ function prompt_region_metric_plots(region_df::DataFrame, region_name::AbstractS
 
         println()
         println(t(:prompt_metric_plots_repeat))
-        again = try
-            lowercase(readline_with_speech("> "))
-        catch err
-            isa(err, InterruptException) && rethrow()
-            ""
-        end
-        again in ("y", "yes", "j", "ja") || return
+        prompt_yes_no() || return
         println()
         println(t(:prompt_metric_plots_next))
     end

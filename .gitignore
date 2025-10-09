@@ -17,6 +17,7 @@ Thumbs.db
 coverage/
 *.cov
 *.lcov
+*.jl.mem
 
 # Dokumentation (z. B. Documenter.jl)
 docs/build/
@@ -27,10 +28,12 @@ out/
 reports/
 figures/
 tmp/
+plots/
 
 # Daten (große/temporäre CSVs)
 data/raw/
 data/tmp/
+data/remote_cache/
 data/*.csv
 !data/ski-regions-data.csv   # diese zentrale CSV trotzdem versionieren
 

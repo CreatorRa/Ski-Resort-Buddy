@@ -26,11 +26,56 @@ Navigate to your project directory. Use the cd command to go to the folder that 
    ```bash
    julia --project=. bin/dach_resort_advisor
    ```
-3. Follow the prompts:
-   - Adjust metric weights (sum 100) or press Enter to retain the defaults.
-   - Choose a country or leave blank to analyse all regions.
-   - Review the yearly snowfall leaderboard and monthly overview, then select a region for a deep dive.
-   - When asked, choose whether to create snow trend or attribute plots (saved to `plots/`).
+3. Interactive Menu Flow
+
+   - When you run the program, you’ll see a guided text menu.
+   - Here’s what happens step-by-step:
+
+   ## Step 1 – Select Your Language
+   - The program will ask which language to use (currently English or German).
+   - Type your choice and press Enter.
+
+   ## Step 2 – Overview or Countrz
+   - Next, you’ll be prompted to choose either to select a country or see an overview of all regions. 
+   - If you choose to select a country you will then be asked to select the you are intereseted in visiting: Germany, Austria, Switzerland.
+
+   ## Step 3 – Adjust Metric Weights
+   - You will now be prompted to declare if you want adjust the weighting of the main variables. It is recommended for first time user to select N for No, to gain a better understanding of the program.
+   - If you have chosen y, you will now see the option to either:
+      1. Press enter and choose your own weighting
+      2. Press 1 to choose the preconfigured Balanced Allrounder
+      3. Press 2 to choose the preconfigured Powder Hunter
+      4. Press 3 to choose the preconfigured Family friendly
+      5. Press 4 to choose the preconfigured Sunny Cruiser
+      6. Press 5 to choose again to enter your own weighting
+   - If you choose to enter your own weights you must now enter custom weight percentages for  (total must equal 100) or press enter to keep the default balanced weights. The weight determines how much each factor influences the ranking resort.
+
+   ## Step 4
+   - You will now see all active filters that are being applied to the data:
+      - Season: The current season of the year.
+      - Date range: The current range of the data.
+      - Whether you have preselected the region.
+      - Observations: The total number of data points being analzyed. 
+   - You will see below the active filters the default weighting we are applying to the data:
+      - Fresh snow: 
+      - Snow Depth: The overall snow fall in centimeters
+      - Temperature: The overall temperature in celcius
+      - Precipitation: The overall rainfall in millimeters
+      - Wind: The wind measure by the Beaufort scale (0-12). A lower value is better. 
+
+   ## Step 5 – View the Results
+   - After confirming your weights:
+   - Either the Top ski regions by your chosen weighting will appear or if you requested an overiview The yearly snowfall leaderboard appears, showing top-performing regions.
+   - A monthly summary table provides weather and snow averages.
+   - You can then select a region (by number or name) to see more granular data about:
+   - Historical data
+   - Weighted scores
+   - Optional trend plots (saved in the `plots/` folder)
+
+   ## Step 6 – Exit the Program
+   - When finished:
+   - You can type “exit” or choose the Exit option in the menu.
+   - The program will close safely, and your cached data remains saved locally for next time.
 
 
 

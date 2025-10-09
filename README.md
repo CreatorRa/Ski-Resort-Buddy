@@ -50,7 +50,7 @@ Navigate to your project directory. Use the cd command to go to the folder that 
       6. Press 5 to choose again to enter your own weighting
    - If you choose to enter your own weights you must now enter custom weight percentages for  (total must equal 100) or press enter to keep the default balanced weights. The weight determines how much each factor influences the ranking resort.
 
-   # Step 4
+   # Step 4: Active Filter and Weighting.
    - You will now see all active filters that are being applied to the data:
       - Season: The current season of the year.
       - Date range: The current range of the data.

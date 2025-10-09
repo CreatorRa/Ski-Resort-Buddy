@@ -91,6 +91,7 @@ function run_menu(df::DataFrame, config::CLIConfig)
         println(t(:menu_header))
         println(t(:menu_option_overview))
         println(t(:menu_option_country))
+        println(t(:menu_option_yearly_overview))
         println(t(:menu_option_exit))
         choice = try
             lowercase(readline_with_speech("> "))
@@ -129,6 +130,10 @@ function run_menu(df::DataFrame, config::CLIConfig)
         elseif choice in ("3", "q", "quit", "exit", "beenden")
             println(t(:farewell))
             return
+        elseif choice in ("4", "yearly")
+            print_yearly_overview_for_all_regions(df, weights=base_weights)
+            println()
+            println(t(:info_return_menu))
         elseif choice == ""
             println(t(:menu_select_option))
         else

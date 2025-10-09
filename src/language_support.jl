@@ -47,6 +47,7 @@ prompt_adjust_weights	Adjust weights? (y/N)	Gewichtung anpassen? (y/N)
 menu_header	==== Menu ====	==== Menü ====
 menu_option_overview	1) Overview of all regions	1) Überblick aller Regionen
 menu_option_country	2) Select country	2) Land auswählen
+menu_option_yearly_overview	4) Yearly Overview	4) Jährliche Übersicht
 menu_option_exit	3) Exit	3) Beenden
 info_return_menu	Back to the menu...	Zurück zum Menü...
 info_no_country_selection	[INFO] No selection made – returning to the menu.	[INFO] Keine Auswahl – kehre zum Menü zurück.
@@ -143,6 +144,7 @@ info_monthly_no_month_values	[INFO] Monthly overview not available (no month val
 info_monthly_no_rows	[INFO] No rows for the monthly overview.	[INFO] Keine Zeilen für die Monatsübersicht.
 info_monthly_empty_grouping	[INFO] Monthly overview could not be generated (empty grouping result).	[INFO] Monatsübersicht konnte nicht erstellt werden (leeres Gruppierungsergebnis).
 monthly_overview_header	== Monthly Overview - Regional Averages for {{month}} ==	== Monatsübersicht - regionale Durchschnitte für {{month}} ==
+yearly_overview_header	== Yearly Overview - Regional Averages for {{years}} ==	== Jährliche Übersicht - regionale Durchschnitte für {{years}} ==
 info_ranking_unavailable	[INFO] No ranking available. Check your filters or data.	[INFO] Kein Ranking verfügbar. Prüfe Filter oder Datenlage.
 info_ranking_missing_score	[INFO] Weighted score unavailable – ranking skipped.	[INFO] Gewichteter Score nicht verfügbar – Ranking übersprungen.
 info_ranking_no_valid_scores	[INFO] No valid score values – ranking skipped.	[INFO] Keine gültigen Score-Werte – Ranking übersprungen.

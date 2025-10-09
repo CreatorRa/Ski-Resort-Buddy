@@ -140,6 +140,8 @@ function handle_cli_argument!(state::CLIParseState, arg::String, index::Int)
         state.command = :region
         state.region_focus = next_arg
         consumed = 1
+    elseif arg == "yearly-report"
+        state.command = :yearly_report
     elseif arg == "--from" && next_arg !== nothing
         state.from_str = next_arg
         consumed = 1
@@ -300,6 +302,8 @@ function main()
         run_list(df)
     elseif config.command == :region
         run_region(df, config.region_focus; weights=weights)
+    elseif config.command == :yearly_report
+        print_yearly_overview_for_all_regions(df, weights=weights)
     elseif config.command == :menu
         run_menu(df, CLIConfig(:menu, config.csv_path, config.runargs, config.region_focus, weights, config.force_weight_prompt, nothing, config.speech_cmd, config.language, config.language_explicit))
     else

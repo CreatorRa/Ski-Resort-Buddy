@@ -10,7 +10,7 @@ function stdin_is_tty()
     catch
         return false
     end
-    fd < 0 && return false
+    fd.fd < 0 && return false
     try
         return ccall(:isatty, Cint, (Cint,), fd) == 1
     catch

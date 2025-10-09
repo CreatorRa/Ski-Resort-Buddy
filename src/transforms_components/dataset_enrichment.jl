@@ -6,6 +6,7 @@ names match the labels we use everywhere else.
 """
 function normalize_columns!(df::DataFrame)
     ren = Dict{Symbol,Symbol}()
+    temp_col_found = false
     for c in names(df)
         col_sym = Symbol(c)
         lc = replace(slower(c), "  " => " ")
@@ -13,13 +14,14 @@ function normalize_columns!(df::DataFrame)
             ren[col_sym] = Symbol("Elevation (m)")
         elseif occursin("wind", lc) && occursin("beaufort", lc)
             ren[col_sym] = Symbol("Wind (Beaufort)")
-        elseif occursin("temp", lc)
+        elseif occursin("temp", lc) && !temp_col_found
             ren[col_sym] = Symbol("Temperature (°C)")
+            temp_col_found = true
         elseif occursin("precip", lc) || occursin("niedersch", lc)
             ren[col_sym] = Symbol("Precipitation (mm)")
         elseif (occursin("snow", lc) || occursin("schnee", lc)) && (occursin("new", lc) || occursin("neu", lc) || occursin("fresh", lc))
             ren[col_sym] = Symbol("Snow_New (cm)")
-        elseif occursin("snow", lc) || occursin("schnee", lc)
+        elseif (occursin("snow", lc) || occursin("schnee", lc)) && !occursin("daily", lc) && !occursin("monthly", lc) && !occursin("mean", lc) && !occursin("max", lc)
             ren[col_sym] = Symbol("Snow Depth (cm)")
         elseif lc == "region"
             ren[col_sym] = :Region
@@ -57,7 +59,7 @@ function load_data(csv_path::Union{Nothing,String}=nothing)
     date_col = find_date_column(df)
     isnothing(date_col) && error(t(:error_no_date_column))
 
-    df[!, date_col] = DateTime.(df[!, date_col]) .|> Date
+    df[!, date_col] = Date.(df[!, date_col], dateformat"d/m/y")
     sort!(df, date_col)
     rename!(df, Dict(date_col => :Date))
 

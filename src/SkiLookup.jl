@@ -20,8 +20,8 @@ using .Localization: t
 export main
 
 const ROOT_DIR   = abspath(joinpath(@__DIR__, ".."))
-const CSV_FILE_NAME = "DACH_SKi_Resort_data.csv"
-const CSV_REMOTE_URL = "https://raw.githubusercontent.com/CreatorRa/Ski-Resort-Buddy/refs/heads/safe-commit/Clean%20data/DACH_SKi_Resort_data.csv"
+const CSV_FILE_NAME = "DACH SKi Resort data coalesce.csv"
+const CSV_REMOTE_URL = "https://raw.githubusercontent.com/CreatorRa/Ski-Resort-Buddy/refs/heads/Big-Data/Clean%20data/DACH%20SKi%20Resort%20data%20coalesce.csv"
 const CSV_PATH_DEFAULT = CSV_REMOTE_URL
 const COMMAND_PREFIX = "julia --project=. bin/dach_resort_advisor"
 const PLOTS_OUTPUT_DIR = joinpath(ROOT_DIR, "plots")

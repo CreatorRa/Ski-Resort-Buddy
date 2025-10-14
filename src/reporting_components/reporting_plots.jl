@@ -24,12 +24,12 @@ function save_region_snow_plot(region_df::DataFrame, region_name::AbstractString
     isempty(depth_values) && return nothing
 
     plot_obj = plot(depth_dates, depth_values;
-        label="Snow depth (cm)",
+        label=t(:plot_label_snow_depth),
         color=:dodgerblue,
         linewidth=2,
-        xlabel="Date",
-        ylabel="Centimetres",
-        title="$(region_name) — snow trend",
+        xlabel=t(:plot_axis_date),
+        ylabel=t(:plot_axis_centimetres),
+        title=t(:plot_title_snow_trend; region=region_name),
         background_color=:white)
 
     new_col = Symbol("Snow_New (cm)")
@@ -38,7 +38,7 @@ function save_region_snow_plot(region_df::DataFrame, region_name::AbstractString
         if !isempty(new_values)
             plot!(plot_obj, new_dates, new_values;
                 seriestype=:bar,
-                label="Daily new snow (cm)",
+                label=t(:plot_label_daily_new_snow),
                 color=:lightskyblue,
                 alpha=0.45,
                 bar_width=0.6)
@@ -77,12 +77,12 @@ function save_region_score_trend(region_monthly::DataFrame, region_name::Abstrac
         linewidth=2,
         marker=:circle,
         markersize=4,
-        xlabel="Month",
-        ylabel="Weighted Score",
-        title="$(region_name) — weighted score trend",
+        xlabel=t(:plot_axis_month),
+        ylabel=t(:plot_label_weighted_score),
+        title=t(:plot_title_score_trend; region=region_name),
         legend=:topright,
         background_color=:white,
-        label="Weighted Score")
+        label=t(:plot_label_weighted_score))
 
     if length(scores) >= 3
         window = min(length(scores), 3)
@@ -91,7 +91,7 @@ function save_region_score_trend(region_monthly::DataFrame, region_name::Abstrac
             color=:orange,
             linewidth=2,
             linestyle=:dash,
-            label="Rolling mean (w=$(window))")
+            label=t(:plot_label_rolling_mean; window=window))
     end
 
     ensure_plot_dir()
@@ -152,7 +152,7 @@ function save_region_metric_trend(region_df::DataFrame, region_name::AbstractStr
             alpha=0.65,
             bar_width=0.8,
             label=metric_label,
-            xlabel="Datum",
+            xlabel=t(:plot_axis_date),
             ylabel=ylabel,
             legend=:topright,
             title=plot_title,
@@ -165,7 +165,7 @@ function save_region_metric_trend(region_df::DataFrame, region_name::AbstractStr
             marker=:circle,
             markersize=3,
             label=metric_label,
-            xlabel="Datum",
+            xlabel=t(:plot_axis_date),
             ylabel=ylabel,
             legend=:topright,
             title=plot_title,
@@ -180,7 +180,7 @@ function save_region_metric_trend(region_df::DataFrame, region_name::AbstractStr
             color=:darkgray,
             linewidth=2,
             linestyle=:dash,
-            label="Rollender Mittelwert (w=$(window))")
+            label=t(:plot_label_rolling_mean; window=window))
     end
 
     ensure_plot_dir()

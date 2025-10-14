@@ -204,6 +204,15 @@ prompt_metric_plots_next	Next selection (press Enter to finish):	Nächste Auswah
 region_prompt_header	Enter region for a focused review (press Enter to skip):	Region für eine Detailansicht eingeben (Enter zum Überspringen):
 prompt_session_finish	Exit tool? (q = Quit, Enter to stay)	Tool beenden? (q = Quit, Enter zum Zurückkehren)
 metric_plot_title	{{region}} — {{metric}}	{{region}} — {{metric}}
+plot_label_snow_depth	Snow depth (cm)	Schneehöhe (cm)
+plot_axis_date	Date	Datum
+plot_axis_centimetres	Centimetres	Zentimeter
+plot_label_daily_new_snow	Daily new snow (cm)	Neuschnee pro Tag (cm)
+plot_title_snow_trend	{{region}} — snow trend	{{region}} — Schneetrend
+plot_axis_month	Month	Monat
+plot_label_weighted_score	Weighted Score	Gewichteter Score
+plot_title_score_trend	{{region}} — weighted score trend	{{region}} — Verlauf des gewichteten Scores
+plot_label_rolling_mean	Rolling mean (w={{window}})	Gleitender Mittelwert (w={{window}})
 warn_invalid_weight_env	Ignoring invalid weight from ENV	Ungültiger Gewichtswert aus ENV wird ignoriert
 qc_header	== QC Checks ==	== QC-Prüfungen ==
 qc_missing_days	[MISSING] Region={{region}}: {{count}} missing days ({{sample}}{{extra}})	[FEHLT] Region={{region}}: {{count}} fehlende Tage ({{sample}}{{extra}})

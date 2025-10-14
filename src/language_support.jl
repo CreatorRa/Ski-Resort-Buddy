@@ -5,7 +5,7 @@ not need to worry about translation details.
 """
 module Localization
 
-export t, localize, set_language!, current_language, available_languages, DEFAULT_LANGUAGE, is_supported_language, normalize_language
+export t, localize, set_language!, current_language, available_languages, DEFAULT_LANGUAGE, is_supported_language, normalize_language, localized_country_name, canonical_country_name
 
 const DEFAULT_LANGUAGE = :en
 const ACTIVE_LANGUAGE = Base.RefValue{Symbol}(DEFAULT_LANGUAGE)
@@ -14,6 +14,7 @@ const TEMPLATE_PATTERN = r"\{\{(\w+)\}\}"
 
 const TRANSLATION_DATA = raw"""
 greeting	Hello, welcome to our tool!	Hallo, willkommen in unserem Tool!
+greeting_language_confirmation	You kept the default language.	Sie haben sich für die deutsche Version entschieden.
 info_no_data_after_filters	No data available after applying filters.	Keine Daten nach Anwendung der Filter verfügbar.
 info_terminal_finished	Done. Terminal reporting finished.	Fertig. Terminalausgabe beendet.
 warn_invalid_force_weight_prompt_env	Ignoring invalid FORCE_WEIGHT_PROMPT env value	Ungültiger FORCE_WEIGHT_PROMPT-Umgebungswert wird ignoriert
@@ -42,6 +43,7 @@ menu_country_entry	 {{index}}) {{country}}	 {{index}}) {{country}}
 menu_country_prompt	Choose a number or enter the country name (empty for all countries).	Nummer wählen oder Ländernamen eingeben (leer für alle Länder).
 info_input_aborted	[INFO] Input aborted: {{error}}	[INFO] Eingabe abgebrochen: {{error}}
 menu_country_retry	Not recognized. Please try again (press Enter to cancel).	Nicht erkannt. Bitte erneut versuchen (Enter zum Abbrechen).
+prompt_yes_no_retry	Not recognized. Please enter 'y' or 'N' (press Enter to cancel).	Nicht erkannt. Bitte erneut versuchen (Enter zum Abbrechen).
 info_input_expected	[INFO] Input expected – press Ctrl+C to cancel if no keyboard input is possible.	[INFO] Eingabe erwartet – breche mit Strg+C ab, falls keine Tastatureingabe möglich ist.
 prompt_adjust_weights	Adjust weights? (y/N)	Gewichtung anpassen? (y/N)
 menu_header	==== Menu ====	==== Menü ====
@@ -247,6 +249,35 @@ end
 
 const STRINGS = build_translation_strings()
 
+const COUNTRY_TRANSLATIONS = Dict{String,Dict{Symbol,String}}(
+    "Austria" => Dict(:en => "Austria", :de => "Österreich"),
+    "Germany" => Dict(:en => "Germany", :de => "Deutschland"),
+    "Switzerland" => Dict(:en => "Switzerland", :de => "Schweiz")
+)
+
+const COUNTRY_CANONICAL_ALIASES = let
+    mapping = Dict{String,String}()
+    for (canonical, translations) in COUNTRY_TRANSLATIONS
+        normalized = lowercase(canonical)
+        mapping[normalized] = canonical
+        for value in values(translations)
+            alias = lowercase(value)
+            mapping[alias] = canonical
+            ascii = replace(alias, 'ä' => 'a', 'ö' => 'o', 'ü' => 'u', 'ß' => "ss")
+            mapping[ascii] = canonical
+        end
+    end
+    mapping["oesterreich"] = "Austria"
+    mapping["osterreich"] = "Austria"
+    mapping["at"] = "Austria"
+    mapping["aut"] = "Austria"
+    mapping["de"] = "Germany"
+    mapping["deu"] = "Germany"
+    mapping["ch"] = "Switzerland"
+    mapping["che"] = "Switzerland"
+    mapping
+end
+
 
 """
 normalize_language(lang)
@@ -300,6 +331,33 @@ Return the language symbol that is currently active.
 """
 function current_language()
     return ACTIVE_LANGUAGE[]
+end
+
+"""
+localized_country_name(country; lang=current_language())
+
+Return the localized display name for a country, falling back to the canonical
+dataset label when no translation is available.
+"""
+function localized_country_name(country::AbstractString; lang::Symbol=current_language())
+    canonical = String(country)
+    translations = get(COUNTRY_TRANSLATIONS, canonical, nothing)
+    if translations === nothing
+        return canonical
+    end
+    return get(translations, lang, get(translations, DEFAULT_LANGUAGE, canonical))
+end
+
+"""
+canonical_country_name(input)
+
+Map a country label entered by the user to the dataset's canonical spelling.
+Returns `nothing` when no mapping is known.
+"""
+function canonical_country_name(input::AbstractString)
+    normalized = lowercase(strip(String(input)))
+    isempty(normalized) && return nothing
+    return get(COUNTRY_CANONICAL_ALIASES, normalized, nothing)
 end
 
 """

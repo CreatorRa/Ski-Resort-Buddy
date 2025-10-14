@@ -1,7 +1,7 @@
 # Interactive menu orchestration: handles the text UI for the main program loop,
 # including country filtering and optional weight adjustments before calling the
 # reporting workflows.
-using .Localization: t
+using .Localization: t, localized_country_name, canonical_country_name
 
 """
 Interactive menu workflow. Guides the user through the on-screen menu so they can
@@ -23,9 +23,15 @@ function prompt_country_choice(df::DataFrame)
     println()
     println(t(:menu_available_countries_header))
     for (idx, country) in enumerate(countries)
-        println(t(:menu_country_entry; index=idx, country=country))
+        display = localized_country_name(country)
+        println(t(:menu_country_entry; index=idx, country=display))
     end
     println(t(:menu_country_prompt))
+    countries_set = Set(countries)
+    localized_lookup = Dict{String,String}()
+    for country in countries
+        localized_lookup[lowercase(localized_country_name(country))] = country
+    end
     while true
         input = try
             readline_with_speech("> ")
@@ -38,6 +44,14 @@ function prompt_country_choice(df::DataFrame)
         parsed_idx = tryparse(Int, input)
         if parsed_idx !== nothing && 1 <= parsed_idx <= length(countries)
             return String(countries[parsed_idx])
+        end
+        canonical = canonical_country_name(input)
+        if canonical !== nothing && canonical in countries_set
+            return canonical
+        end
+        normalized = lowercase(strip(input))
+        if haskey(localized_lookup, normalized)
+            return localized_lookup[normalized]
         end
         idx = findfirst(c -> slower(c) == slower(input), countries)
         if idx !== nothing
@@ -55,13 +69,7 @@ weight prompt runs and the dictionary is updated in place.
 """
 function ask_adjust_weights!(weights::Dict{Symbol,Float64})
     println(t(:prompt_adjust_weights))
-    response = try
-        lowercase(readline_with_speech("> "))
-    catch err
-        isa(err, InterruptException) && rethrow()
-        ""
-    end
-    if response in ("y", "yes", "j", "ja")
+    if prompt_yes_no()
         prepare_weights!(weights; force=true, prompt=true)
         return true
     end

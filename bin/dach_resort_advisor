@@ -48,14 +48,20 @@ function prompt_instantiate(missing::Vector{String})
     println("Detected missing packages: " * join(missing, ", "))
     println("You can install them by running `julia --project=. -e \"using Pkg; Pkg.instantiate()\"`.")
     stdin_is_tty() || return false
-    print("Run `Pkg.instantiate()` now? (y/N) ")
-    flush(stdout)
-    response = try
-        readline()
-    catch
-        ""
+    while true
+        print("Run `Pkg.instantiate()` now? (y/N) ")
+        flush(stdout)
+        response = try
+            readline()
+        catch
+            ""
+        end
+        trimmed = lowercase(strip(response))
+        trimmed == "" && return false
+        trimmed == "y" && return true
+        trimmed == "n" && return false
+        println("Please enter 'y' or 'N'.")
     end
-    lowercase(strip(response)) in ("y", "yes", "j", "ja")
 end
 
 success, err, err_bt = try_load_skilookup()
@@ -88,12 +94,6 @@ if !success
         err === nothing || Base.display_error(stderr, err, err_bt)
         exit(1)
     end
-end
-
-if ran_instantiate[]
-    println("Dependencies installed. Launching SkiLookup...")
-else
-    println("All project dependencies available. Launching SkiLookup...")
 end
 
 SkiLookup.main()

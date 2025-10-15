@@ -6,12 +6,12 @@ Ski-Resort-Buddy is a Julia CLI that ranks alpine resorts by weather, snow quali
 
 - **One-command menu** – `julia --project=. bin/dach_resort_advisor menu` prompts for weights, lets you focus on a country, and keeps looping until you exit.
 - **Remote dataset, cached offline** – the current CSV is fetched once and reused (`data/remote_cache/`). No manual downloads needed.
-- **Yearly snowfall leaderboard** – the former “daily” list now reports total fresh snow per region across the last 12 months for more realistic comparisons.
+- **Yearly snowfall leaderboard** – the first table in the overall overview reports total fresh snow per region across the last 12 months for more realistic comparisons.
 - **Region deep dive** – after running a report you can pick regions by table rank or name, view history, and optionally save snow or attribute plots.
 - **Custom weights** – adjust the five core metrics (fresh snow, snow depth, temperature, precipitation, wind) interactively or via CLI flags; the weighted score is reflected everywhere in the report.
 
 ## Data
-The data used in the project can be found here: https://www.kaggle.com/datasets/cartermc/dach-ski-resort-advisor-data/data/data
+The data used in the project does not have to but can be manually downloaded here: [https://www.kaggle.com/datasets/cartermc/dach-ski-resort-advisor-data/data/data](https://pzghdabqnsdthysjzacl.supabase.co/storage/v1/object/public/datasets//ski-regions-dataset-2025-10-02.csv)
 
 
 ## Getting Started
@@ -109,23 +109,6 @@ Enjoy planning your next powder day! 🚡
 
 ## Disclaimer and Terms of Use
 
-This project was developed for purely educational and non-commercial purposes as part of an academic assignment. The data used in this project is sourced from a publicly available dataset hosted on Zenodo, and all rights, ownership, and credit for the data belong entirely to the original authors and publishers.
+This project was developed solely for educational and non-commercial purposes as part of an academic assignment. The dataset utilized herein is artificially generated and does not represent actual data for DACH ski regions.
 
 The information and analysis presented are provided "as is" without any warranty of accuracy, completeness, or suitability for any particular purpose. No commercial use of this data or the resulting analysis is intended or permitted. The use of this data adheres to the Creative Commons Attribution 4.0 International license under which it was published.
-Data Source and Citation
-
-The climatological and snow data used in this project was obtained from the following source:
-
-    Authors: Schmucki, E., Marty, C., Fierz, C., & Lehning, M.
-
-    Year: (2021).
-
-    Title: Long-term snow and climate measurement data from the IMIS and national observation networks.
-
-    Publisher: Zenodo.
-
-    Date Accessed: September 29, 2025.
-
-    DOI (Digital Object Identifier): https://doi.org/10.5281/zenodo.5109574
-
-Please refer to the source link for the original dataset and full metadata.

@@ -12,7 +12,8 @@ Ski-Resort-Buddy is a Julia CLI that ranks alpine resorts by weather, snow quali
 
 ## Data
 The data used in the project was created with lovable. You can use the code from this repository-project to extend or modify the dataset yourself: https://github.com/John0Day/ski-resort-data-generator
-direct csv download: https://pzghdabqnsdthysjzacl.supabase.co/storage/v1/object/public/datasets//ski-regions-dataset-2025-10-02.csv
+
+If you want to access the csv used in this project it can be downloaded here: https://pzghdabqnsdthysjzacl.supabase.co/storage/v1/object/public/datasets//ski-regions-dataset-2025-10-02.csv
 
 
 ## Getting Started

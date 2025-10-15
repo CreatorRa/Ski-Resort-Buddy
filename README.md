@@ -11,7 +11,8 @@ Ski-Resort-Buddy is a Julia CLI that ranks alpine resorts by weather, snow quali
 - **Custom weights** – adjust the five core metrics (fresh snow, snow depth, temperature, precipitation, wind) interactively or via CLI flags; the weighted score is reflected everywhere in the report.
 
 ## Data
-The data used in the project does not have to but can be manually downloaded here: [https://www.kaggle.com/datasets/cartermc/dach-ski-resort-advisor-data/data/data](https://pzghdabqnsdthysjzacl.supabase.co/storage/v1/object/public/datasets//ski-regions-dataset-2025-10-02.csv)
+The data used in the project was created with lovable. You can use the code from this repository-project to extend or modify the dataset yourself: https://github.com/John0Day/ski-resort-data-generator
+direct csv download: https://pzghdabqnsdthysjzacl.supabase.co/storage/v1/object/public/datasets//ski-regions-dataset-2025-10-02.csv
 
 
 ## Getting Started
